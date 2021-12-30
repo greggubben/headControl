@@ -4,12 +4,13 @@
 // Button controls if sign is on or off
 // Webpage also available to control sign
 
+#include <SPIFFS.h>
 #include <WiFi.h>
 #include <WiFiManager.h>              // For managing the Wifi Connection
 #include <ESPmDNS.h>                  // For running OTA and Web Server
 #include <WiFiUdp.h>                  // For running OTA
 #include <ArduinoOTA.h>               // For running OTA
-//#include <ESPWebServer.h>             // For running Web Server
+#include <ESPAsyncWebServer.h>        // For running Web Server
 #include <ArduinoJson.h>              // For running Web Services
 #include <Wire.h>                     // For Servos
 #include <SPI.h>                      // For display
@@ -101,422 +102,8 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 //
 // Web Server definitions
 //
-WebServer server(80);
+AsyncWebServer server(80);
 
-static const char MAIN_PAGE[] PROGMEM = R"====(
-<HTML>
-<HEAD>
-<TITLE>Head Control Face Selection</TITLE>
-<LINK REL="icon" HREF="data:,">
-<SCRIPT>
-
-
-//
-// Print an Error message
-//
-function displayError (errorMessage) {
-  document.getElementById('errors').style.visibility = 'visible';
-  document.getElementById('errors').innerHTML = document.getElementById('errors').innerHTML + errorMessage + '<BR>';
-  
-}
-
-//
-// Print a Debug message
-//
-function displayDebug (debugMessage) {
-  document.getElementById('debug').style.visibility = 'visible';
-  document.getElementById('debug').innerHTML = document.getElementById('debug').innerHTML + debugMessage + '<BR>';
-  
-}
-
-
-//
-// Function to make a REST call
-//
-function restCall(httpMethod, url, cFunction, bodyText=null) {
-  contentType = 'text/plain';
-  if (httpMethod == 'POST') {
-    contentType = 'application/json';
-  }
-  fetch (url, {
-    method: httpMethod,
-    headers: {
-      'Content-Type': contentType
-    },
-    body: bodyText,
-  })
-  .then (response => {
-    // Check Response Status
-    if (!response.ok) {
-      throw new Error('Error response: ' + response.status + ' ' + response.statusText);
-    }
-    return response;
-  })
-  .then (response => {
-    // process JSON response
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      throw new TypeError("No JSON returned!");
-    }
-    return response.json();
-  })
-  .then (jsonData => {
-    // Send JSON to callback function if present
-    if (cFunction != undefined) {
-      displayDebug(JSON.stringify(jsonData));
-      cFunction(jsonData);
-    }
-  })
-  .catch((err) => {
-    displayError(err.message);
-  });
-}
-
-//
-// Handling displaying the current status
-//
-function statusLoaded (jsonResponse) {
-}
-
-
-//
-// actions to perform when the page is loaded
-//
-function doOnLoad() {
-  restCall('GET', '/light', statusLoaded);
-}
-
-</SCRIPT>
-</HEAD>
-<BODY onload='doOnLoad()'>
-<CENTER><H1>Head Control Face Selection</H1></CENTER>
-<BR>
-<BR>
-
-<HR style='margin-top: 10px; margin-bottom: 10px;'>
-<DIV id='debug' style='font-family: monospace; color:blue; outline-style: solid; outline-color:blue; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
-<DIV id='errors' style='color:red; outline-style: solid; outline-color:red; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
-</BODY>
-</HTML>
-)====";
-
-
-//
-// HTML Page for testing servo ranges
-//
-
-static const char TEST_PAGE[] PROGMEM = R"====(
-<HTML>
-<HEAD>
-<TITLE>Head Control Test Page</TITLE>
-<LINK REL="icon" HREF="data:,">
-<SCRIPT>
-
-let tableHeaders = ["Servo Num", "Name", "Min Angle", "Max Angle", "Angle", "Change", "Override"];
-var servoList = {};
-
-const createServoTable = () => {
-  const servoDiv = document.querySelector("div.servoList");
-
-  // Remove everything in the Div
-  while (servoDiv.firstChild) servoDiv.removeChild(servoDiv.firstChild);
-
-  let servoTable = document.createElement('table');
-  servoTable.className = 'servoTable';
-
-  let servoTableHead = document.createElement('thead');
-  servoTableHead.className = 'servoTableHead';
-
-  let servoTableHeaderRow = document.createElement('tr');
-  servoTableHeaderRow.className = 'servoTableHeaderRow';
-
-  tableHeaders.forEach(header => {
-    let servoHeader = document.createElement('th');
-    servoHeader.innerText = header;
-    servoTableHeaderRow.append(servoHeader);
-  });
-
-  servoTableHead.append(servoTableHeaderRow);
-  servoTable.append(servoTableHead);
-
-  let servoTableBody = document.createElement('tbody');
-  servoTableBody.className = 'servoTableBody';
-  servoTable.append(servoTableBody);
-
-  servoDiv.append(servoTable);
-}
-
-const buildServoList = (singleServo) => {
-  if (!(singleServo.servoNum in servoList)) {
-    servoList[singleServo.servoNum] = {};
-  }
-  servoList[singleServo.servoNum]["servoNum"] = singleServo.servoNum;
-  servoList[singleServo.servoNum]["name"] = singleServo.name;
-  servoList[singleServo.servoNum]["minAngle"] = parseInt(singleServo.minAngle);
-  servoList[singleServo.servoNum]["maxAngle"] = parseInt(singleServo.maxAngle);
-  servoList[singleServo.servoNum]["angle"] = parseInt(singleServo.angle);
-  servoList[singleServo.servoNum]["direction"] = parseInt(singleServo.direction);
-  if (!("override" in servoList[singleServo.servoNum])) {
-    servoList[singleServo.servoNum]["override"] = false;
-  }
-}
-
-const appendServo = (singleServo) => {
-  const servoTable = document.querySelector('.servoTable');
-  let servoTableBodyRow = document.createElement('tr');
-  servoTableBodyRow.className = 'servoTableBodyRow';
-
-  let servoNum = document.createElement('td');
-  servoNum.innerText = singleServo.servoNum;
-  let servoName = document.createElement('td');
-  servoName.innerText = singleServo.name;
-  let servoMinAngle = document.createElement('td');
-  servoMinAngle.innerText = singleServo.minAngle;
-  let servoMaxAngle = document.createElement('td');
-  servoMaxAngle.innerText = singleServo.maxAngle;
-  let servoAngle = document.createElement('td');
-  servoAngle.innerText = singleServo.angle;
-
-  let servoChangeAngle = document.createElement('td');
-  let servoUpLeftButton = document.createElement('button');
-  servoUpLeftButton.className = 'servoTableBodyButton';
-  let servoDownRightButton = document.createElement('button');
-  servoDownRightButton.className = 'servoTableBodyButton';
-
-  if (singleServo.direction == "UD" || singleServo.direction == "DU") {
-    servoUpLeftButton.innerHTML = "Move Up";
-    servoDownRightButton.innerHTML = "Move Down";
-    if (singleServo.direction == "UD") {
-      servoUpLeftButton.addEventListener("click", function () { 
-        addServoAngle(`${singleServo.servoNum}`);
-      });
-      servoDownRightButton.addEventListener("click", function () { 
-        subServoAngle(`${singleServo.servoNum}`);
-      });
-    } else {
-      servoUpLeftButton.addEventListener("click", function () { 
-        subServoAngle(`${singleServo.servoNum}`);
-      });
-      servoDownRightButton.addEventListener("click", function () { 
-        addServoAngle(`${singleServo.servoNum}`);
-      });
-    }
-    let br = document.createElement('br');
-    servoChangeAngle.append(servoUpLeftButton, br, servoDownRightButton);
-  }
-  else if (singleServo.direction == "LR" || singleServo.direction == "RL") {
-    servoUpLeftButton.innerHTML = "Move Left";
-    servoDownRightButton.innerHTML = "Move Right";
-    if (singleServo.direction == "LR") {
-      servoUpLeftButton.addEventListener("click", function () { 
-        subServoAngle(`${singleServo.servoNum}`);
-      });
-      servoDownRightButton.addEventListener("click", function () { 
-        addServoAngle(`${singleServo.servoNum}`);
-      });
-    } else {
-      servoUpLeftButton.addEventListener("click", function () { 
-        addServoAngle(`${singleServo.servoNum}`);
-      });
-      servoDownRightButton.addEventListener("click", function () { 
-        subServoAngle(`${singleServo.servoNum}`);
-      });
-    }
-    servoChangeAngle.append(servoUpLeftButton, servoDownRightButton);
-  }
-
-  let servoOverride = document.createElement('td');
-  let servoOverrideSelector = document.createElement('input');
-  servoOverrideSelector.type = "radio";
-  servoOverrideSelector.name = "overrideSelector";
-  servoOverrideSelector.id = "overrideSelector";
-  servoOverrideSelector.value = singleServo.servoNum;
-  servoOverrideSelector.checked = servoList[singleServo.servoNum].override;
-  servoOverrideSelector.addEventListener("click", function () { 
-    if (servoList[this.value].override) {
-      servoList[this.value].override = false;
-      this.checked = false;
-    } else {
-      for(let servo in servoList) {
-        servoList[servo].override = false;
-      };
-      servoList[this.value].override = true;
-    }
-  });
-  servoOverride.append(servoOverrideSelector);
-
-  servoTableBodyRow.append(servoNum, servoName, servoMinAngle, servoMaxAngle, servoAngle, servoChangeAngle, servoOverride);
-  servoTable.append(servoTableBodyRow);
-}
-
-// Add to the Servo Angle
-const addServoAngle = (servoNum) => {
-  const incrementSelect = document.getElementById("increment");
-  let increment = parseInt(incrementSelect.value);
-  servoList[servoNum].angle += increment;
-  changeServo(servoList[servoNum]);
-} 
-
-// Substract from the Servo Angle
-const subServoAngle = (servoNum) => {
-  const incrementSelect = document.getElementById("increment");
-  let increment = parseInt(incrementSelect.value);
-  servoList[servoNum].angle -= increment;
-  changeServo(servoList[servoNum]);
-} 
-
-// Change the servo angle
-const changeServo = (changeServo) => {
-  //alert(changeServo.servoNum + ": " + changeServo.name + " --> " + changeServo.angle);
-  var url = '/servos?servoNum=' + changeServo.servoNum + '&angle=' + changeServo.angle;
-  if (changeServo.override) {
-    url += '&override';
-  }
-  restCall('PUT', url, statusLoaded);
-}
-
-//
-// Print an Error message
-//
-function displayError (errorMessage) {
-  document.getElementById('errors').style.visibility = 'visible';
-  document.getElementById('errors').innerHTML = document.getElementById('errors').innerHTML + errorMessage + '<BR>';
-  
-}
-
-//
-// Print a Debug message
-//
-function displayDebug (debugMessage) {
-  document.getElementById('debug').style.visibility = 'visible';
-  document.getElementById('debug').innerHTML = document.getElementById('debug').innerHTML + debugMessage + '<BR>';
-  
-}
-
-
-//
-// Function to make a REST call
-//
-function restCall(httpMethod, url, cFunction, bodyText=null) {
-  contentType = 'text/plain';
-  if (httpMethod == 'POST') {
-    contentType = 'application/json';
-  }
-  fetch (url, {
-    method: httpMethod,
-    headers: {
-      'Content-Type': contentType
-    },
-    body: bodyText,
-  })
-  .then (response => {
-    // Check Response Status
-    if (!response.ok) {
-      throw new Error('Error response: ' + response.status + ' ' + response.statusText);
-    }
-    return response;
-  })
-  .then (response => {
-    // process JSON response
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      throw new TypeError("No JSON returned!");
-    }
-    return response.json();
-  })
-  .then (jsonData => {
-    // Send JSON to callback function if present
-    if (cFunction != undefined) {
-      //displayDebug(JSON.stringify(jsonData));
-      cFunction(jsonData);
-    }
-  })
-  .catch((err) => {
-    displayError(err.message);
-  });
-}
-
-//
-// Handling displaying the current status
-//
-function statusLoaded (jsonResponse) {
-  createServoTable();
-  servosStatus = jsonResponse.servos;
-  for (const servoStatus of servosStatus) {
-    buildServoList(servoStatus);
-    appendServo(servoStatus);
-  }
-}
-
-
-//
-// actions to perform when the page is loaded
-//
-function doOnLoad() {
-  restCall('GET', '/servos', statusLoaded);
-}
-
-</SCRIPT>
-<STYLE>
-.servoTable {
-  padding: 0;
-  margin: auto;
-  border-collapse: collapse;
-  width: 80%;
-  text-align: center;
-}
-.servoTableHeaderRow {
-  font-weight: bold;
-  height: 50px;
-  background-color: DarkGreen;
-  color: HoneyDew;
-}
-.servoTableBodyRow:nth-child(odd) {
-  background-color: rgba(128, 224, 128, 0.050);
-}
-.servoTableBodyRow:hover {
-  background-color: LightGreen;
-}
-.servoTable tr td {
-  height: 50px;
-  padding: 6px;
-}
-.servoTableBodyButton {
-  margin: 2px;
-  width: 100px;
-  height: 25px;
-  background-color: MediumAquaMarine;
-  border-radius: 5px;
-}
-.servoTableBodyButton:hover {
-  background-color: SeaGreen;
-  color: HoneyDew;
-}
-</STYLE>
-</HEAD>
-<BODY onload='doOnLoad()'>
-<CENTER><H1>Head Control Test Page</H1></CENTER>
-<BR>
-<BR>
-
-<center>
-<label for="increment">Select Increment to move Servos:</label>
-<select name="increment" id="increment">
-  <option value="1">1</option>
-  <option value="5">5</option>
-  <option value="10">10</option>
-</select>
-</center>
-<BR>
-<DIV class='servoList'></DIV>
-
-<BR>
-<HR style='margin-top: 10px; margin-bottom: 10px;'>
-<DIV id='debug' style='font-family: monospace; color:blue; outline-style: solid; outline-color:blue; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
-<DIV id='errors' style='color:red; outline-style: solid; outline-color:red; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
-</BODY>
-</HTML>
-)====";
 
 //
 // Head definitions
@@ -697,7 +284,7 @@ void initServos() {
 //
 // Send the current status of the Servos
 //
-void sendStatus() {
+void sendStatus(AsyncWebServerRequest *request) {
   DynamicJsonDocument jsonDoc(2048);
   JsonObject jsonRoot = jsonDoc.to<JsonObject>();
 
@@ -715,7 +302,7 @@ void sendStatus() {
 
   String payload;
   serializeJson(jsonDoc, payload);
-  server.send(200, "application/json", payload);
+  request->send(200, "application/json", payload);
 
 }
 
@@ -723,6 +310,7 @@ void sendStatus() {
  * Web Server Routines
  *************************************************/
 
+/*
 //
 // Display the main page for selecting a face to display
 //
@@ -736,33 +324,33 @@ void handleRoot () {
 void handleTest () {
   server.send_P(200, "text/html", TEST_PAGE, sizeof(TEST_PAGE));
 }
-
+*/
 
 //
 // Handle service for Servos 
 //
-void handleServos () {
+void handleServos (AsyncWebServerRequest *request) {
   uint8_t servoNum = 0;
   uint8_t angle = 0;
   //left_eyebrow.name = String("HNDL");
-  switch (server.method()) {
+  switch (request->method()) {
     case HTTP_PUT:
       //left_eyebrow.name = "PUT";
-      if (server.hasArg("servoNum") && server.hasArg("angle")) {
-        servoNum = server.arg("servoNum").toInt();
-        angle = server.arg("angle").toInt();
+      if (request->hasArg("servoNum") && request->hasArg("angle")) {
+        servoNum = request->arg("servoNum").toInt();
+        angle = request->arg("angle").toInt();
         headServo *hs = headServos[servoNum];
         setAngle(hs, angle);
       }
-      sendStatus();
+      sendStatus(request);
       drawScreen = true;
       break;
     case HTTP_GET:
       //left_eyebrow.name = "GET";
-      sendStatus();
+      sendStatus(request);
       break;
     default:
-      server.send(405, "text/plain", "Method Not Allowed");
+      request->send(405, "text/plain", "Method Not Allowed");
       break;
   }
   //server.send_P(200, "text/html", TEST_PAGE, sizeof(TEST_PAGE));
@@ -771,20 +359,20 @@ void handleServos () {
 //
 // Display a Not Found page
 //
-void handleNotFound() {
+void handleNotFound(AsyncWebServerRequest *request) {
   //digitalWrite(led, 1);
   String message = "File Not Found\n\n";
   message += "URI: ";
-  message += server.uri();
+  message += request->url();
   message += "\nMethod: ";
-  message += (server.method() == HTTP_GET) ? "GET" : "POST";
+  message += request->methodToString();
   message += "\nArguments: ";
-  message += server.args();
+  message += request->args();
   message += "\n";
-  for (uint8_t i = 0; i < server.args(); i++) {
-    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
+  for (uint8_t i = 0; i < request->args(); i++) {
+    message += " " + request->argName(i) + ": " + request->arg(i) + "\n";
   }
-  server.send(404, "text/plain", message);
+  request->send(404, "text/plain", message);
   //digitalWrite(led, 0);
 }
 
@@ -822,6 +410,16 @@ void setup() {
   ticker.attach(0.6, tick);
 
 
+  //
+  // Start SPIFFS
+  //
+  tft.print("SPIFFS ... ");
+  if (!SPIFFS.begin()) {
+    tft.println("Error Starting");
+  }
+  else {
+    tft.println("Started");
+  }
   //
   // Set up the Wifi Connection
   //
@@ -940,9 +538,13 @@ void setup() {
   // Setup WebServer
   //
   tft.print("Web Server ... ");
-  server.on("/", handleRoot);
+  server.on("/", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    request->send(SPIFFS, "/mainpage.html", "text/html");
+  });
   //server.on("/face", handleFace);
-  server.on("/test", handleTest);
+  server.on("/test", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    request->send(SPIFFS, "/testpage.html", "text/html");
+  });
   server.on("/servos", handleServos);
   server.onNotFound(handleNotFound);
   server.begin();
@@ -976,7 +578,7 @@ void setup() {
 void loop() {
   // Handle any requests
   ArduinoOTA.handle();
-  server.handleClient();
+  //server.handleClient();  // Not needed with AsyncWebServer
   //MDNS.update();          // Not needed on ESP32
   //telnetSerial.handle();
 

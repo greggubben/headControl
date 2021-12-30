@@ -1,0 +1,95 @@
+<HTML>
+    <HEAD>
+    <TITLE>Head Control Face Selection</TITLE>
+    <LINK REL="icon" HREF="data:,">
+    <SCRIPT>
+    
+    
+    //
+    // Print an Error message
+    //
+    function displayError (errorMessage) {
+      document.getElementById('errors').style.visibility = 'visible';
+      document.getElementById('errors').innerHTML = document.getElementById('errors').innerHTML + errorMessage + '<BR>';
+      
+    }
+    
+    //
+    // Print a Debug message
+    //
+    function displayDebug (debugMessage) {
+      document.getElementById('debug').style.visibility = 'visible';
+      document.getElementById('debug').innerHTML = document.getElementById('debug').innerHTML + debugMessage + '<BR>';
+      
+    }
+    
+    
+    //
+    // Function to make a REST call
+    //
+    function restCall(httpMethod, url, cFunction, bodyText=null) {
+      contentType = 'text/plain';
+      if (httpMethod == 'POST') {
+        contentType = 'application/json';
+      }
+      fetch (url, {
+        method: httpMethod,
+        headers: {
+          'Content-Type': contentType
+        },
+        body: bodyText,
+      })
+      .then (response => {
+        // Check Response Status
+        if (!response.ok) {
+          throw new Error('Error response: ' + response.status + ' ' + response.statusText);
+        }
+        return response;
+      })
+      .then (response => {
+        // process JSON response
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new TypeError("No JSON returned!");
+        }
+        return response.json();
+      })
+      .then (jsonData => {
+        // Send JSON to callback function if present
+        if (cFunction != undefined) {
+          displayDebug(JSON.stringify(jsonData));
+          cFunction(jsonData);
+        }
+      })
+      .catch((err) => {
+        displayError(err.message);
+      });
+    }
+    
+    //
+    // Handling displaying the current status
+    //
+    function statusLoaded (jsonResponse) {
+    }
+    
+    
+    //
+    // actions to perform when the page is loaded
+    //
+    function doOnLoad() {
+      restCall('GET', '/light', statusLoaded);
+    }
+    
+    </SCRIPT>
+    </HEAD>
+    <BODY onload='doOnLoad()'>
+    <CENTER><H1>Head Control Face Selection</H1></CENTER>
+    <BR>
+    <BR>
+    
+    <HR style='margin-top: 10px; margin-bottom: 10px;'>
+    <DIV id='debug' style='font-family: monospace; color:blue; outline-style: solid; outline-color:blue; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
+    <DIV id='errors' style='color:red; outline-style: solid; outline-color:red; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
+    </BODY>
+    </HTML>
+    

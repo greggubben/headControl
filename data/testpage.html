@@ -1,0 +1,311 @@
+<HTML>
+    <HEAD>
+    <TITLE>Head Control Test Page</TITLE>
+    <LINK REL="icon" HREF="data:,">
+    <SCRIPT>
+    
+    let tableHeaders = ["Servo Num", "Name", "Min Angle", "Max Angle", "Angle", "Change", "Override"];
+    var servoList = {};
+    
+    const createServoTable = () => {
+      const servoDiv = document.querySelector("div.servoList");
+    
+      // Remove everything in the Div
+      while (servoDiv.firstChild) servoDiv.removeChild(servoDiv.firstChild);
+    
+      let servoTable = document.createElement('table');
+      servoTable.className = 'servoTable';
+    
+      let servoTableHead = document.createElement('thead');
+      servoTableHead.className = 'servoTableHead';
+    
+      let servoTableHeaderRow = document.createElement('tr');
+      servoTableHeaderRow.className = 'servoTableHeaderRow';
+    
+      tableHeaders.forEach(header => {
+        let servoHeader = document.createElement('th');
+        servoHeader.innerText = header;
+        servoTableHeaderRow.append(servoHeader);
+      });
+    
+      servoTableHead.append(servoTableHeaderRow);
+      servoTable.append(servoTableHead);
+    
+      let servoTableBody = document.createElement('tbody');
+      servoTableBody.className = 'servoTableBody';
+      servoTable.append(servoTableBody);
+    
+      servoDiv.append(servoTable);
+    }
+    
+    const buildServoList = (singleServo) => {
+      if (!(singleServo.servoNum in servoList)) {
+        servoList[singleServo.servoNum] = {};
+      }
+      servoList[singleServo.servoNum]["servoNum"] = singleServo.servoNum;
+      servoList[singleServo.servoNum]["name"] = singleServo.name;
+      servoList[singleServo.servoNum]["minAngle"] = parseInt(singleServo.minAngle);
+      servoList[singleServo.servoNum]["maxAngle"] = parseInt(singleServo.maxAngle);
+      servoList[singleServo.servoNum]["angle"] = parseInt(singleServo.angle);
+      servoList[singleServo.servoNum]["direction"] = parseInt(singleServo.direction);
+      if (!("override" in servoList[singleServo.servoNum])) {
+        servoList[singleServo.servoNum]["override"] = false;
+      }
+    }
+    
+    const appendServo = (singleServo) => {
+      const servoTable = document.querySelector('.servoTable');
+      let servoTableBodyRow = document.createElement('tr');
+      servoTableBodyRow.className = 'servoTableBodyRow';
+    
+      let servoNum = document.createElement('td');
+      servoNum.innerText = singleServo.servoNum;
+      let servoName = document.createElement('td');
+      servoName.innerText = singleServo.name;
+      let servoMinAngle = document.createElement('td');
+      servoMinAngle.innerText = singleServo.minAngle;
+      let servoMaxAngle = document.createElement('td');
+      servoMaxAngle.innerText = singleServo.maxAngle;
+      let servoAngle = document.createElement('td');
+      servoAngle.innerText = singleServo.angle;
+    
+      let servoChangeAngle = document.createElement('td');
+      let servoUpLeftButton = document.createElement('button');
+      servoUpLeftButton.className = 'servoTableBodyButton';
+      let servoDownRightButton = document.createElement('button');
+      servoDownRightButton.className = 'servoTableBodyButton';
+    
+      if (singleServo.direction == "UD" || singleServo.direction == "DU") {
+        servoUpLeftButton.innerHTML = "Move Up";
+        servoDownRightButton.innerHTML = "Move Down";
+        if (singleServo.direction == "UD") {
+          servoUpLeftButton.addEventListener("click", function () { 
+            addServoAngle(`${singleServo.servoNum}`);
+          });
+          servoDownRightButton.addEventListener("click", function () { 
+            subServoAngle(`${singleServo.servoNum}`);
+          });
+        } else {
+          servoUpLeftButton.addEventListener("click", function () { 
+            subServoAngle(`${singleServo.servoNum}`);
+          });
+          servoDownRightButton.addEventListener("click", function () { 
+            addServoAngle(`${singleServo.servoNum}`);
+          });
+        }
+        let br = document.createElement('br');
+        servoChangeAngle.append(servoUpLeftButton, br, servoDownRightButton);
+      }
+      else if (singleServo.direction == "LR" || singleServo.direction == "RL") {
+        servoUpLeftButton.innerHTML = "Move Left";
+        servoDownRightButton.innerHTML = "Move Right";
+        if (singleServo.direction == "LR") {
+          servoUpLeftButton.addEventListener("click", function () { 
+            subServoAngle(`${singleServo.servoNum}`);
+          });
+          servoDownRightButton.addEventListener("click", function () { 
+            addServoAngle(`${singleServo.servoNum}`);
+          });
+        } else {
+          servoUpLeftButton.addEventListener("click", function () { 
+            addServoAngle(`${singleServo.servoNum}`);
+          });
+          servoDownRightButton.addEventListener("click", function () { 
+            subServoAngle(`${singleServo.servoNum}`);
+          });
+        }
+        servoChangeAngle.append(servoUpLeftButton, servoDownRightButton);
+      }
+    
+      let servoOverride = document.createElement('td');
+      let servoOverrideSelector = document.createElement('input');
+      servoOverrideSelector.type = "radio";
+      servoOverrideSelector.name = "overrideSelector";
+      servoOverrideSelector.id = "overrideSelector";
+      servoOverrideSelector.value = singleServo.servoNum;
+      servoOverrideSelector.checked = servoList[singleServo.servoNum].override;
+      servoOverrideSelector.addEventListener("click", function () { 
+        if (servoList[this.value].override) {
+          servoList[this.value].override = false;
+          this.checked = false;
+        } else {
+          for(let servo in servoList) {
+            servoList[servo].override = false;
+          };
+          servoList[this.value].override = true;
+        }
+      });
+      servoOverride.append(servoOverrideSelector);
+    
+      servoTableBodyRow.append(servoNum, servoName, servoMinAngle, servoMaxAngle, servoAngle, servoChangeAngle, servoOverride);
+      servoTable.append(servoTableBodyRow);
+    }
+    
+    // Add to the Servo Angle
+    const addServoAngle = (servoNum) => {
+      const incrementSelect = document.getElementById("increment");
+      let increment = parseInt(incrementSelect.value);
+      servoList[servoNum].angle += increment;
+      changeServo(servoList[servoNum]);
+    } 
+    
+    // Substract from the Servo Angle
+    const subServoAngle = (servoNum) => {
+      const incrementSelect = document.getElementById("increment");
+      let increment = parseInt(incrementSelect.value);
+      servoList[servoNum].angle -= increment;
+      changeServo(servoList[servoNum]);
+    } 
+    
+    // Change the servo angle
+    const changeServo = (changeServo) => {
+      //alert(changeServo.servoNum + ": " + changeServo.name + " --> " + changeServo.angle);
+      var url = '/servos?servoNum=' + changeServo.servoNum + '&angle=' + changeServo.angle;
+      if (changeServo.override) {
+        url += '&override';
+      }
+      restCall('PUT', url, statusLoaded);
+    }
+    
+    //
+    // Print an Error message
+    //
+    function displayError (errorMessage) {
+      document.getElementById('errors').style.visibility = 'visible';
+      document.getElementById('errors').innerHTML = document.getElementById('errors').innerHTML + errorMessage + '<BR>';
+      
+    }
+    
+    //
+    // Print a Debug message
+    //
+    function displayDebug (debugMessage) {
+      document.getElementById('debug').style.visibility = 'visible';
+      document.getElementById('debug').innerHTML = document.getElementById('debug').innerHTML + debugMessage + '<BR>';
+      
+    }
+    
+    
+    //
+    // Function to make a REST call
+    //
+    function restCall(httpMethod, url, cFunction, bodyText=null) {
+      contentType = 'text/plain';
+      if (httpMethod == 'POST') {
+        contentType = 'application/json';
+      }
+      fetch (url, {
+        method: httpMethod,
+        headers: {
+          'Content-Type': contentType
+        },
+        body: bodyText,
+      })
+      .then (response => {
+        // Check Response Status
+        if (!response.ok) {
+          throw new Error('Error response: ' + response.status + ' ' + response.statusText);
+        }
+        return response;
+      })
+      .then (response => {
+        // process JSON response
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new TypeError("No JSON returned!");
+        }
+        return response.json();
+      })
+      .then (jsonData => {
+        // Send JSON to callback function if present
+        if (cFunction != undefined) {
+          //displayDebug(JSON.stringify(jsonData));
+          cFunction(jsonData);
+        }
+      })
+      .catch((err) => {
+        displayError(err.message);
+      });
+    }
+    
+    //
+    // Handling displaying the current status
+    //
+    function statusLoaded (jsonResponse) {
+      createServoTable();
+      servosStatus = jsonResponse.servos;
+      for (const servoStatus of servosStatus) {
+        buildServoList(servoStatus);
+        appendServo(servoStatus);
+      }
+    }
+    
+    
+    //
+    // actions to perform when the page is loaded
+    //
+    function doOnLoad() {
+      restCall('GET', '/servos', statusLoaded);
+    }
+    
+    </SCRIPT>
+    <STYLE>
+    .servoTable {
+      padding: 0;
+      margin: auto;
+      border-collapse: collapse;
+      width: 80%;
+      text-align: center;
+    }
+    .servoTableHeaderRow {
+      font-weight: bold;
+      height: 50px;
+      background-color: DarkGreen;
+      color: HoneyDew;
+    }
+    .servoTableBodyRow:nth-child(odd) {
+      background-color: rgba(128, 224, 128, 0.050);
+    }
+    .servoTableBodyRow:hover {
+      background-color: LightGreen;
+    }
+    .servoTable tr td {
+      height: 50px;
+      padding: 6px;
+    }
+    .servoTableBodyButton {
+      margin: 2px;
+      width: 100px;
+      height: 25px;
+      background-color: MediumAquaMarine;
+      border-radius: 5px;
+    }
+    .servoTableBodyButton:hover {
+      background-color: SeaGreen;
+      color: HoneyDew;
+    }
+    </STYLE>
+    </HEAD>
+    <BODY onload='doOnLoad()'>
+    <CENTER><H1>Head Control Test Page</H1></CENTER>
+    <BR>
+    <BR>
+    
+    <center>
+    <label for="increment">Select Increment to move Servos:</label>
+    <select name="increment" id="increment">
+      <option value="1">1</option>
+      <option value="5">5</option>
+      <option value="10">10</option>
+    </select>
+    </center>
+    <BR>
+    <DIV class='servoList'></DIV>
+    
+    <BR>
+    <HR style='margin-top: 10px; margin-bottom: 10px;'>
+    <DIV id='debug' style='font-family: monospace; color:blue; outline-style: solid; outline-color:blue; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
+    <DIV id='errors' style='color:red; outline-style: solid; outline-color:red; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
+    </BODY>
+    </HTML>
+    
