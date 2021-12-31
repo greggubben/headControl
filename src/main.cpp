@@ -202,7 +202,7 @@ void setAngle (headServo *hs, int angle, bool limit = true) {
   uint16_t pulse = map(angle, 0, 180, SERVOMIN, SERVOMAX);
   pwm.setPWM(hs->servoNum, 0, pulse);
   hs->angle = angle;
-  tft.printf("%2d: %3d - %4d", hs->servoNum, angle, pulse);
+  //tft.printf("%2d: %3d - %4d", hs->servoNum, angle, pulse);
 }
 
 
@@ -332,6 +332,7 @@ void handleTest () {
 void handleServos (AsyncWebServerRequest *request) {
   uint8_t servoNum = 0;
   uint8_t angle = 0;
+  bool limit = true;
   //left_eyebrow.name = String("HNDL");
   switch (request->method()) {
     case HTTP_PUT:
@@ -340,7 +341,8 @@ void handleServos (AsyncWebServerRequest *request) {
         servoNum = request->arg("servoNum").toInt();
         angle = request->arg("angle").toInt();
         headServo *hs = headServos[servoNum];
-        setAngle(hs, angle);
+        if (request->hasArg("override")) limit = false;
+        setAngle(hs, angle, limit);
       }
       sendStatus(request);
       drawScreen = true;
@@ -420,6 +422,8 @@ void setup() {
   else {
     tft.println("Started");
   }
+
+
   //
   // Set up the Wifi Connection
   //
