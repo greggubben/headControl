@@ -58,7 +58,8 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 #define SETUP_FONT_SIZE 1
 #define SETUP_FONT_COLOR ILI9341_WHITE
 #define SERVO_STATUS_FONT_SIZE 2
-#define SERVO_STATUS_FONT_COLOR ILI9341_YELLOW
+#define SERVO_STATUS_FONT_COLOR ILI9341_GREENYELLOW
+#define SERVO_HEADER_FONT_COLOR ILI9341_GREEN
 uint16_t screenHeight = 0;
 uint16_t screenWidth = 0;
 uint16_t statusTopLeftX = 0;
@@ -118,15 +119,15 @@ typedef struct headServo {  // Definition for Servo being used by the head
 } headServo;
 
 // The widest range for all the servos is 30 to 150
-headServo left_eyebrow        = {0, "LEB",    58, 102,  80, "UD"};
-headServo right_eyebrow       = {1, "REB",    64, 114,  89, "DU"};
-headServo left_eye_updown     = {2, "LE_UD",  70, 100,  85, "UD"};
-headServo left_eye_leftright  = {3, "LE_LR",  50, 76,   63, "LR"};
-headServo right_eye_updown    = {4, "RE_UD",  73, 123,  98, "UD"};
-headServo right_eye_leftright = {5, "RE_LR",  59,  94,  76, "RL"};
-headServo mouth               = {6, "MOUTH",  64,  88,  65, "UD"};
-headServo neck_updown         = {7, "N_UD",   67,  77,  70, "UD"};
-headServo neck_leftright      = {8, "N_LR",   30, 100,  65, "LR"};
+headServo left_eyebrow        = {0, "LEFT  EYE BROW",  58, 102,  80, "UD"};
+headServo right_eyebrow       = {1, "RIGHT EYE BROW",  64, 114,  89, "DU"};
+headServo left_eye_updown     = {2, "LEFT  EYE U/D ",  70, 100,  85, "UD"};
+headServo left_eye_leftright  = {3, "LEFT  EYE SIDE",  50, 76,   63, "LR"};
+headServo right_eye_updown    = {4, "RIGHT EYE U/D ",  73, 123,  98, "UD"};
+headServo right_eye_leftright = {5, "RIGHT EYE SIDE",  59,  94,  76, "RL"};
+headServo mouth               = {6,     "MOUTH OPEN",  64,  88,  65, "UD"};
+headServo neck_updown         = {7,      "NECK NOD ",  67,  77,  70, "UD"};
+headServo neck_leftright      = {8,      "NECK TURN",  30, 100,  65, "LR"};
 
 headServo *headServos[] = {&left_eyebrow, &right_eyebrow, &left_eye_updown, &left_eye_leftright, &right_eye_updown, &right_eye_leftright, &mouth, &neck_updown, &neck_leftright};
 int headServosLen = sizeof(headServos) / sizeof(headServos[0]);
@@ -170,7 +171,7 @@ void configModeCallback (WiFiManager *myWiFiManager) {
 void clearTftScreen(uint8_t fontSize, uint16_t fontColor) {
   tft.fillScreen(BACKGROUND_COLOR);
   // origin = left,top landscape (USB left upper)
-  tft.setRotation(0);
+  tft.setRotation(1);
   tft.setTextSize(fontSize);
   tft.setTextColor(fontColor);
   tft.setCursor(0,0);
@@ -181,11 +182,36 @@ void drawServoStatus() {
   //tft.setTextSize(SERVO_STATUS_FONT_SIZE);
   //tft.setTextColor(SERVO_STATUS_FONT_COLOR);
   //tft.fillRect(statusTopLeftX, statusTopLeftY, screenWidth, statusHeight, BACKGROUND_COLOR);
-  clearTftScreen(SERVO_STATUS_FONT_SIZE, SERVO_STATUS_FONT_COLOR);
+  clearTftScreen(SERVO_STATUS_FONT_SIZE, SERVO_HEADER_FONT_COLOR);
+  
+  int16_t textX;
+  int16_t textY;
+  uint16_t textWidth;
+  uint16_t textHeight;
 
+  tft.printf("%2s %14s %3s\n", "#", "NAME", "Ang");
+  int16_t cursorX = tft.getCursorX();
+  int16_t cursorY = tft.getCursorY();
+
+  //tft.setTextColor(SERVO_HEADER_FONT_COLOR);
+  tft.getTextBounds(" ", cursorX, cursorY, &textX, &textY, &textWidth, &textHeight);
+  cursorY+=2;
+  int16_t length = textWidth*2;
+  tft.drawLine(cursorX, cursorY, cursorX+length, cursorY, SERVO_HEADER_FONT_COLOR);
+  cursorX += length;
+  cursorX += textWidth;
+  length = textWidth*14;
+  tft.drawLine(cursorX, cursorY, cursorX+length, cursorY, SERVO_HEADER_FONT_COLOR);
+  cursorX += length;
+  cursorX += textWidth;
+  length = textWidth*3;
+  tft.drawLine(cursorX, cursorY, cursorX+length, cursorY, SERVO_HEADER_FONT_COLOR);
+
+  tft.println();
+  tft.setTextColor(SERVO_STATUS_FONT_COLOR);
   for (headServo *hs : headServos) {
-    uint16_t currPwm = pwm.getPWM(hs->servoNum);
-    tft.printf("%2d %5s %3d %4d\n", hs->servoNum, hs->name.c_str(), hs->angle, currPwm);
+    //uint16_t currPwm = pwm.getPWM(hs->servoNum);
+    tft.printf("%2d %14s %3d\n", hs->servoNum, hs->name.c_str(), hs->angle);
     //tft.ptintln();
   }
 }
