@@ -254,14 +254,17 @@
       padding: 0;
       margin: auto;
       border-collapse: collapse;
-      width: 80%;
       text-align: center;
     }
     .servoTableHeaderRow {
       font-weight: bold;
+      font-size: large;
       height: 50px;
       background-color: DarkGreen;
       color: HoneyDew;
+    }
+    .servoTableHeaderRow th {
+      padding: 10px;
     }
     .servoTableBodyRow:nth-child(odd) {
       background-color: rgba(128, 224, 128, 0.050);
@@ -270,6 +273,7 @@
       background-color: LightGreen;
     }
     .servoTable tr td {
+      white-space:nowrap;
       height: 50px;
       padding: 6px;
     }
