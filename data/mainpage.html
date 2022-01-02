@@ -3,7 +3,83 @@
     <TITLE>Head Control Face Selection</TITLE>
     <LINK REL="icon" HREF="data:,">
     <SCRIPT>
+
+    let tableHeaders = ["Face Num", "Name", "Select"];
+    var faceList = {};
     
+    const buildFaceList = (singleFace) => {
+      if (!(singleFace.faceNum in faceList)) {
+        faceList[singleFace.faceNum] = {};
+      }
+      faceList[singleFace.faceNum]["faceNum"] = singleFace.faceNum;
+      faceList[singleFace.faceNum]["name"] = singleFace.name;
+      faceList[singleFace.faceNum]["selected"] = singleFace.selected;
+    }
+    
+    const createFaceTable = () => {
+      const faceDiv = document.querySelector("div.faceList");
+    
+      // Remove everything in the Div
+      while (faceDiv.firstChild) faceDiv.removeChild(faceDiv.firstChild);
+    
+      let faceTable = document.createElement('table');
+      faceTable.className = 'faceTable';
+    
+      let faceTableHead = document.createElement('thead');
+      faceTableHead.className = 'faceTableHead';
+    
+      let faceTableHeaderRow = document.createElement('tr');
+      faceTableHeaderRow.className = 'faceTableHeaderRow';
+    
+      tableHeaders.forEach(header => {
+        let faceHeader = document.createElement('th');
+        faceHeader.innerText = header;
+        faceTableHeaderRow.append(faceHeader);
+      });
+    
+      faceTableHead.append(faceTableHeaderRow);
+      faceTable.append(faceTableHead);
+    
+      let faceTableBody = document.createElement('tbody');
+      faceTableBody.className = 'faceTableBody';
+      faceTable.append(faceTableBody);
+    
+      faceDiv.append(faceTable);
+    }
+    
+    const appendFaceRow = (singleFace) => {
+      const faceTable = document.querySelector('.faceTable');
+      let faceTableBodyRow = document.createElement('tr');
+      faceTableBodyRow.className = 'faceTableBodyRow';
+    
+      let faceNum = document.createElement('td');
+      faceNum.innerText = singleFace.faceNum;
+      let faceName = document.createElement('td');
+      faceName.innerText = singleFace.name;
+      let faceSelect = document.createElement('td');
+      if (singleFace.selected) {
+        faceSelect.innerText = "Selected";
+      }
+      else {
+        let faceSelectButton = document.createElement('button');
+        faceSelectButton.className = 'faceTableBodyButton';
+        faceSelectButton.innerHTML = "Select";
+        faceSelectButton.addEventListener("click", function () { 
+            changeFace(`${singleFace.faceNum}`);
+        });
+        faceSelect.append(faceSelectButton);
+      }
+    
+      faceTableBodyRow.append(faceNum, faceName, faceSelect);
+      faceTable.append(faceTableBodyRow);
+    }
+
+    // Change the face
+    const changeFace = (faceNum) => {
+      //alert(changeServo.servoNum + ": " + changeServo.name + " --> " + changeServo.angle);
+      var url = '/face?faceNum=' + faceNum;
+      restCall('PUT', url, statusLoaded);
+    }
     
     //
     // Print an Error message
@@ -70,6 +146,12 @@
     // Handling displaying the current status
     //
     function statusLoaded (jsonResponse) {
+      createFaceTable();
+      facesStatus = jsonResponse.faces;
+      for (const faceStatus of facesStatus) {
+        buildFaceList(faceStatus);
+        appendFaceRow(faceStatus);
+      }
     }
     
     
@@ -77,16 +159,59 @@
     // actions to perform when the page is loaded
     //
     function doOnLoad() {
-      restCall('GET', '/light', statusLoaded);
+      restCall('GET', '/face', statusLoaded);
     }
     
     </SCRIPT>
+    <STYLE>
+        .faceTable {
+          padding: 0;
+          margin: auto;
+          border-collapse: collapse;
+          text-align: center;
+        }
+        .faceTableHeaderRow {
+          font-weight: bold;
+          font-size: large;
+          height: 50px;
+          background-color: DarkBlue;
+          color: PowderBlue;
+        }
+        .faceTableHeaderRow th {
+          padding: 10px;
+        }
+        .faceTableBodyRow:nth-child(odd) {
+          background-color: rgba(128, 128, 224, 0.050);
+        }
+        .faceTableBodyRow:hover {
+          background-color: LightBlue;
+        }
+        .faceTable tr td {
+          height: 50px;
+          padding: 6px;
+        }
+        .faceTableBodyButton {
+          font-weight: bold;
+          margin: 2px;
+          width: 90px;
+          height: 25px;
+          background-color: MediumBlue;
+          color: SkyBlue;
+          border-radius: 5px;
+        }
+        .faceTableBodyButton:hover {
+          background-color: Cyan;
+          color: DarkBlue;
+        }
+    </STYLE>
     </HEAD>
     <BODY onload='doOnLoad()'>
     <CENTER><H1>Head Control Face Selection</H1></CENTER>
     <BR>
     <BR>
-    
+
+    <DIV class='faceList'></DIV>
+
     <HR style='margin-top: 10px; margin-bottom: 10px;'>
     <DIV id='debug' style='font-family: monospace; color:blue; outline-style: solid; outline-color:blue; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
     <DIV id='errors' style='color:red; outline-style: solid; outline-color:red; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>

@@ -60,6 +60,7 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 #define SERVO_STATUS_FONT_SIZE 2
 #define SERVO_STATUS_FONT_COLOR ILI9341_GREENYELLOW
 #define SERVO_HEADER_FONT_COLOR ILI9341_GREEN
+#define FACE_STATUS_FONT_COLOR ILI9341_CYAN
 uint16_t screenHeight = 0;
 uint16_t screenWidth = 0;
 uint16_t statusTopLeftX = 0;
@@ -133,6 +134,24 @@ headServo *headServos[] = {&left_eyebrow, &right_eyebrow, &left_eye_updown, &lef
 int headServosLen = sizeof(headServos) / sizeof(headServos[0]);
 
 
+//
+// Face Definitions
+//
+typedef struct face {     // Definition for Face to set head servos
+  String name;            // Name for the face
+  uint8_t angles[9];      // Angles for all 9 servos in the order of headServos[]
+} face;
+
+// List of Face definitions
+face middle = {"Middle", { 80,  89,  85,  63,  98,  76,  65,  70,  65}};
+face frown  = {"Frown",  { 60, 112,  85,  63,  98,  76,  65,  70,  65}};
+face spock  = {"Spock",  { 80, 112,  85,  63,  98,  76,  65,  70,  65}};
+
+face *faces[] = {&middle, &frown, &spock};
+int facesLen = sizeof(faces) / sizeof(faces[0]);
+
+int selectedFaceNum = 0;
+
 /*************************************************
  * Callback Utilities during setup
  *************************************************/
@@ -177,7 +196,7 @@ void clearTftScreen(uint8_t fontSize, uint16_t fontColor) {
   tft.setCursor(0,0);
 }
 
-void drawServoStatus() {
+void drawStatus() {
   //tft.setCursor(statusTopLeftX, statusTopLeftY);
   //tft.setTextSize(SERVO_STATUS_FONT_SIZE);
   //tft.setTextColor(SERVO_STATUS_FONT_COLOR);
@@ -214,7 +233,13 @@ void drawServoStatus() {
     tft.printf("%2d %14s %3d\n", hs->servoNum, hs->name.c_str(), hs->angle);
     //tft.ptintln();
   }
+
+  tft.setTextColor(FACE_STATUS_FONT_COLOR);
+  tft.println();
+  face *selectedFace = faces[selectedFaceNum];
+  tft.printf("Face: %2d - %s\n", selectedFaceNum, selectedFace->name.c_str());
 }
+
 
 /*************************************************
  * Servo Functions
@@ -302,15 +327,18 @@ void middleServos() {
 //
 void initServos() {
   // Find the min and max of the limits
-  for (headServo *hs : headServos) {
-    setAngle(hs, hs->angle);
-  }
-
+  //for (headServo *hs : headServos) {
+  //  setAngle(hs, hs->angle);
+  //}
+  //face *newFace = faces[selectedFaceNum];
+  //setFace(faces[selectedFaceNum]);
 }
+
+
 //
 // Send the current status of the Servos
 //
-void sendStatus(AsyncWebServerRequest *request) {
+void sendServos(AsyncWebServerRequest *request) {
   DynamicJsonDocument jsonDoc(2048);
   JsonObject jsonRoot = jsonDoc.to<JsonObject>();
 
@@ -332,25 +360,82 @@ void sendStatus(AsyncWebServerRequest *request) {
 
 }
 
+
+/*************************************************
+ * Servo Functions
+ *************************************************/
+
+
+//
+// Set servos to a new face
+//
+void setFace (face *newFace) {
+  for (headServo *hs : headServos) {
+    setAngle(hs, newFace->angles[hs->servoNum]);
+  }
+}
+
+
+//
+// Send the list of Faces
+//
+void sendFaces(AsyncWebServerRequest *request) {
+  DynamicJsonDocument jsonDoc(2048);
+  JsonObject jsonRoot = jsonDoc.to<JsonObject>();
+
+  JsonArray jsonFaceArray = jsonRoot.createNestedArray("faces");
+
+  for (int f=0; f<facesLen; f++) {
+    JsonObject jsonFaceStatus = jsonFaceArray.createNestedObject();
+    jsonFaceStatus["faceNum"] = f;
+    jsonFaceStatus["name"] = faces[f]->name;
+    jsonFaceStatus["selected"] = (f == selectedFaceNum);
+  }
+
+  String payload;
+  serializeJson(jsonDoc, payload);
+  request->send(200, "application/json", payload);
+
+}
+
+
 /*************************************************
  * Web Server Routines
  *************************************************/
 
-/*
-//
-// Display the main page for selecting a face to display
-//
-void handleRoot () {
-  server.send_P(200, "text/html", MAIN_PAGE, sizeof(MAIN_PAGE));
+void handleFace (AsyncWebServerRequest *request) {
+  uint8_t faceNum = 0;
+  switch (request->method()) {
+    case HTTP_PUT:
+      //left_eyebrow.name = "PUT";
+      if (request->hasArg("faceNum")) {
+        faceNum = request->arg("faceNum").toInt();
+        if (0 <= faceNum && faceNum < facesLen) {
+          selectedFaceNum = faceNum;
+          face *newFace = faces[selectedFaceNum];
+          setFace(newFace);
+          sendFaces(request);
+        }
+        else {
+          request->send(400, "text/plain", "Argument 'faceNum' out of range.");
+        }
+      }
+      else {
+        request->send(400, "text/plain", "Argument 'faceNum' missing.");
+      }
+      drawScreen = true;
+      break;
+    case HTTP_GET:
+      //left_eyebrow.name = "GET";
+      sendFaces(request);
+      break;
+    default:
+      request->send(405, "text/plain", "Method Not Allowed");
+      break;
+  }
+  //server.send_P(200, "text/html", TEST_PAGE, sizeof(TEST_PAGE));
 }
 
-//
-// Display the test page for individually moving servos
-//
-void handleTest () {
-  server.send_P(200, "text/html", TEST_PAGE, sizeof(TEST_PAGE));
-}
-*/
 
 //
 // Handle service for Servos 
@@ -366,16 +451,24 @@ void handleServos (AsyncWebServerRequest *request) {
       if (request->hasArg("servoNum") && request->hasArg("angle")) {
         servoNum = request->arg("servoNum").toInt();
         angle = request->arg("angle").toInt();
-        headServo *hs = headServos[servoNum];
         if (request->hasArg("override")) limit = false;
-        setAngle(hs, angle, limit);
+        if (0 <= servoNum && servoNum < headServosLen) {
+          headServo *hs = headServos[servoNum];
+          setAngle(hs, angle, limit);
+        }
+        else {
+          request->send(400, "text/plain", "Argument 'servoNum' out of range.");
+        }
       }
-      sendStatus(request);
+      else {
+        request->send(400, "text/plain", "Argument 'servoNum' or 'angle' is missing.");
+      }
+      sendServos(request);
       drawScreen = true;
       break;
     case HTTP_GET:
       //left_eyebrow.name = "GET";
-      sendStatus(request);
+      sendServos(request);
       break;
     default:
       request->send(405, "text/plain", "Method Not Allowed");
@@ -552,7 +645,8 @@ void setup() {
    */
   //pwm.setOscillatorFrequency(25000000);
   pwm.setPWMFreq(SERVO_FREQ);  // Analog servos run at ~50 Hz updates
-  initServos();
+  setFace(faces[selectedFaceNum]);
+  //initServos();
   delay(500);
   //middleServos();
   tft.println("Started");
@@ -568,14 +662,21 @@ void setup() {
   // Setup WebServer
   //
   tft.print("Web Server ... ");
+  // Main page to select a Face to show on the Head
   server.on("/", HTTP_GET, [] (AsyncWebServerRequest *request) {
     request->send(SPIFFS, "/mainpage.html", "text/html");
   });
-  //server.on("/face", handleFace);
+  // Web Service to put selected face on the head
+  // and return face state
+  server.on("/face", handleFace);
+  // Test page to move the servos independently
   server.on("/test", HTTP_GET, [] (AsyncWebServerRequest *request) {
     request->send(SPIFFS, "/testpage.html", "text/html");
   });
+  // Web Service to set a single servo to a specific angle
+  // and return state of all servos
   server.on("/servos", handleServos);
+  
   server.onNotFound(handleNotFound);
   server.begin();
   tft.println("Started");
@@ -621,7 +722,7 @@ void loop() {
   delay(100);
 
   if (drawScreen) {
-    drawServoStatus();
+    drawStatus();
     drawScreen = false;
   }
 
