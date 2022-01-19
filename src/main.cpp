@@ -59,6 +59,7 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 #define SETUP_FONT_COLOR ILI9341_WHITE
 #define SERVO_STATUS_FONT_SIZE 2
 #define SERVO_STATUS_FONT_COLOR ILI9341_GREENYELLOW
+#define SERVO_STATUS_DISABLED_FONT_COLOR ILI9341_LIGHTGREY
 #define SERVO_HEADER_FONT_COLOR ILI9341_GREEN
 #define FACE_STATUS_FONT_COLOR ILI9341_CYAN
 uint16_t screenHeight = 0;
@@ -112,6 +113,7 @@ AsyncWebServer server(80);
 //
 typedef struct headServo {  // Definition for Servo being used by the head
   uint8_t servoNum;         // Position number of the servo attached to the PWM
+  bool    active;           // Indicated if this servo should be set
   String  name;             // Name for the servo
   uint8_t limitMinAngle;    // This is the minimum angle allowed for this servo
   uint8_t limitMaxAngle;    // This is the maximum angle allowed for this servo
@@ -120,15 +122,15 @@ typedef struct headServo {  // Definition for Servo being used by the head
 } headServo;
 
 // The widest range for all the servos is 30 to 150
-headServo left_eyebrow        = {0, "LEFT  EYE BROW",  58, 102,  80, "UD"};
-headServo right_eyebrow       = {1, "RIGHT EYE BROW",  64, 114,  89, "DU"};
-headServo left_eye_updown     = {2, "LEFT  EYE U/D ",  70, 100,  85, "UD"};
-headServo left_eye_leftright  = {3, "LEFT  EYE SIDE",  50, 76,   63, "LR"};
-headServo right_eye_updown    = {4, "RIGHT EYE U/D ",  73, 123,  98, "UD"};
-headServo right_eye_leftright = {5, "RIGHT EYE SIDE",  59,  94,  76, "RL"};
-headServo mouth               = {6,     "MOUTH OPEN",  64,  88,  65, "UD"};
-headServo neck_updown         = {7,      "NECK NOD ",  67,  77,  70, "UD"};
-headServo neck_leftright      = {8,      "NECK TURN",  30, 100,  65, "LR"};
+headServo left_eyebrow        = {0,  true, "LEFT  EYE BROW",  58, 102,  80, "UD"};
+headServo right_eyebrow       = {1,  true, "RIGHT EYE BROW",  64, 114,  89, "DU"};
+headServo left_eye_updown     = {2,  true, "LEFT  EYE U/D ",  70, 100,  85, "UD"};
+headServo left_eye_leftright  = {3,  true, "LEFT  EYE SIDE",  50, 76,   63, "LR"};
+headServo right_eye_updown    = {4,  true, "RIGHT EYE U/D ",  73, 123,  98, "UD"};
+headServo right_eye_leftright = {5,  true, "RIGHT EYE SIDE",  59,  94,  76, "RL"};
+headServo mouth               = {6,  true,     "MOUTH OPEN",  64,  88,  65, "UD"};
+headServo neck_updown         = {7, false,      "NECK NOD ",  67,  77,  70, "UD"};
+headServo neck_leftright      = {8, false,      "NECK TURN",  30, 100,  65, "LR"};
 
 headServo *headServos[] = {&left_eyebrow, &right_eyebrow, &left_eye_updown, &left_eye_leftright, &right_eye_updown, &right_eye_leftright, &mouth, &neck_updown, &neck_leftright};
 int headServosLen = sizeof(headServos) / sizeof(headServos[0]);
@@ -150,7 +152,7 @@ face spock  = {"Spock",  { 80, 112,  85,  63,  98,  76,  65,  70,  65}};
 face *faces[] = {&middle, &frown, &spock};
 int facesLen = sizeof(faces) / sizeof(faces[0]);
 
-int selectedFaceNum = 0;
+int selectedFaceNum = 0;    // Default to the Middle face
 
 /*************************************************
  * Callback Utilities during setup
@@ -227,9 +229,14 @@ void drawStatus() {
   tft.drawLine(cursorX, cursorY, cursorX+length, cursorY, SERVO_HEADER_FONT_COLOR);
 
   tft.println();
-  tft.setTextColor(SERVO_STATUS_FONT_COLOR);
   for (headServo *hs : headServos) {
     //uint16_t currPwm = pwm.getPWM(hs->servoNum);
+    if (hs->active) {
+      tft.setTextColor(SERVO_STATUS_FONT_COLOR);
+    }
+    else {
+      tft.setTextColor(SERVO_STATUS_DISABLED_FONT_COLOR);
+    }
     tft.printf("%2d %14s %3d\n", hs->servoNum, hs->name.c_str(), hs->angle);
     //tft.ptintln();
   }
@@ -250,9 +257,11 @@ void setAngle (headServo *hs, int angle, bool limit = true) {
   if (angle > 180) angle = 180;
   if (limit && angle < hs->limitMinAngle) angle = hs->limitMinAngle;
   if (limit && angle > hs->limitMaxAngle) angle = hs->limitMaxAngle;
-  uint16_t pulse = map(angle, 0, 180, SERVOMIN, SERVOMAX);
-  pwm.setPWM(hs->servoNum, 0, pulse);
-  hs->angle = angle;
+  if (hs->active) {
+    uint16_t pulse = map(angle, 0, 180, SERVOMIN, SERVOMAX);
+    pwm.setPWM(hs->servoNum, 0, pulse);
+    hs->angle = angle;
+  }
   //tft.printf("%2d: %3d - %4d", hs->servoNum, angle, pulse);
 }
 
@@ -352,6 +361,7 @@ void sendServos(AsyncWebServerRequest *request) {
     jsonServoStatus["minAngle"] = headServos[s]->limitMinAngle;
     jsonServoStatus["maxAngle"] = headServos[s]->limitMaxAngle;
     jsonServoStatus["direction"] = headServos[s]->direction;
+    jsonServoStatus["active"] = headServos[s]->active;
   }
 
   String payload;

@@ -7,6 +7,23 @@
     let tableHeaders = ["Servo Num", "Name", "Min Angle", "Max Angle", "Angle", "Change", "Override"];
     var servoList = {};
     
+    const buildServoList = (singleServo) => {
+      if (!(singleServo.servoNum in servoList)) {
+        servoList[singleServo.servoNum] = {};
+      }
+      servoList[singleServo.servoNum]["servoNum"] = singleServo.servoNum;
+      servoList[singleServo.servoNum]["name"] = singleServo.name;
+      servoList[singleServo.servoNum]["minAngle"] = parseInt(singleServo.minAngle);
+      servoList[singleServo.servoNum]["maxAngle"] = parseInt(singleServo.maxAngle);
+      servoList[singleServo.servoNum]["angle"] = parseInt(singleServo.angle);
+      servoList[singleServo.servoNum]["direction"] = parseInt(singleServo.direction);
+      servoList[singleServo.servoNum]["active"] = parseInt(singleServo.active);
+      if (!("override" in servoList[singleServo.servoNum])) {
+        servoList[singleServo.servoNum]["override"] = false;
+      }
+    }
+
+
     const createServoTable = () => {
       const servoDiv = document.querySelector("div.servoList");
     
@@ -38,25 +55,16 @@
       servoDiv.append(servoTable);
     }
     
-    const buildServoList = (singleServo) => {
-      if (!(singleServo.servoNum in servoList)) {
-        servoList[singleServo.servoNum] = {};
-      }
-      servoList[singleServo.servoNum]["servoNum"] = singleServo.servoNum;
-      servoList[singleServo.servoNum]["name"] = singleServo.name;
-      servoList[singleServo.servoNum]["minAngle"] = parseInt(singleServo.minAngle);
-      servoList[singleServo.servoNum]["maxAngle"] = parseInt(singleServo.maxAngle);
-      servoList[singleServo.servoNum]["angle"] = parseInt(singleServo.angle);
-      servoList[singleServo.servoNum]["direction"] = parseInt(singleServo.direction);
-      if (!("override" in servoList[singleServo.servoNum])) {
-        servoList[singleServo.servoNum]["override"] = false;
-      }
-    }
     
     const appendServo = (singleServo) => {
       const servoTable = document.querySelector('.servoTable');
       let servoTableBodyRow = document.createElement('tr');
-      servoTableBodyRow.className = 'servoTableBodyRow';
+      if (singleServo.active) {
+        servoTableBodyRow.className = 'servoTableBodyRow';
+      }
+      else {
+        servoTableBodyRow.className = 'servoTableBodyDisabledRow';
+      }
     
       let servoNum = document.createElement('td');
       servoNum.innerText = singleServo.servoNum;
@@ -72,8 +80,14 @@
       let servoChangeAngle = document.createElement('td');
       let servoUpLeftButton = document.createElement('button');
       servoUpLeftButton.className = 'servoTableBodyButton';
+      if (!singleServo.active) {
+        servoUpLeftButton.disabled = true;
+      }
       let servoDownRightButton = document.createElement('button');
       servoDownRightButton.className = 'servoTableBodyButton';
+      if (!singleServo.active) {
+        servoDownRightButton.disabled = true;
+      }
     
       if (singleServo.direction == "UD" || singleServo.direction == "DU") {
         servoUpLeftButton.innerHTML = "Move Up";
@@ -123,7 +137,12 @@
       servoOverrideSelector.name = "overrideSelector";
       servoOverrideSelector.id = "overrideSelector";
       servoOverrideSelector.value = singleServo.servoNum;
-      servoOverrideSelector.checked = servoList[singleServo.servoNum].override;
+      if (!singleServo.active) {
+        servoOverrideSelector.disabled = true;
+      }
+      else {
+        servoOverrideSelector.checked = servoList[singleServo.servoNum].override;
+      }
       servoOverrideSelector.addEventListener("click", function () { 
         if (servoList[this.value].override) {
           servoList[this.value].override = false;
@@ -272,6 +291,12 @@
     .servoTableBodyRow:hover {
       background-color: LightGreen;
     }
+    .servoTableBodyDisabledRow:nth-child(odd) {
+      background-color: WhiteSmoke;
+    }
+    .servoTableBodyDisabledRow:hover {
+      background-color: LightGrey;
+    }
     .servoTable tr td {
       white-space:nowrap;
       height: 50px;
@@ -287,6 +312,10 @@
     .servoTableBodyButton:hover {
       background-color: SeaGreen;
       color: HoneyDew;
+    }
+    .servoTableBodyButton:disabled {
+      background-color: gray;
+      color: black;
     }
     </STYLE>
     </HEAD>
