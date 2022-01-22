@@ -113,7 +113,7 @@ AsyncWebServer server(80);
 //
 typedef struct headServo {  // Definition for Servo being used by the head
   uint8_t servoNum;         // Position number of the servo attached to the PWM
-  bool    active;           // Indicated if this servo should be set
+  bool    enabled;           // Indicated if this servo should be set
   String  name;             // Name for the servo
   uint8_t limitMinAngle;    // This is the minimum angle allowed for this servo
   uint8_t limitMaxAngle;    // This is the maximum angle allowed for this servo
@@ -231,7 +231,7 @@ void drawStatus() {
   tft.println();
   for (headServo *hs : headServos) {
     //uint16_t currPwm = pwm.getPWM(hs->servoNum);
-    if (hs->active) {
+    if (hs->enabled) {
       tft.setTextColor(SERVO_STATUS_FONT_COLOR);
     }
     else {
@@ -257,7 +257,7 @@ void setAngle (headServo *hs, int angle, bool limit = true) {
   if (angle > 180) angle = 180;
   if (limit && angle < hs->limitMinAngle) angle = hs->limitMinAngle;
   if (limit && angle > hs->limitMaxAngle) angle = hs->limitMaxAngle;
-  if (hs->active) {
+  if (hs->enabled) {
     uint16_t pulse = map(angle, 0, 180, SERVOMIN, SERVOMAX);
     pwm.setPWM(hs->servoNum, 0, pulse);
     hs->angle = angle;
@@ -361,7 +361,7 @@ void sendServos(AsyncWebServerRequest *request) {
     jsonServoStatus["minAngle"] = headServos[s]->limitMinAngle;
     jsonServoStatus["maxAngle"] = headServos[s]->limitMaxAngle;
     jsonServoStatus["direction"] = headServos[s]->direction;
-    jsonServoStatus["active"] = headServos[s]->active;
+    jsonServoStatus["enabled"] = headServos[s]->enabled;
   }
 
   String payload;

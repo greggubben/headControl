@@ -17,7 +17,7 @@
       servoList[singleServo.servoNum]["maxAngle"] = parseInt(singleServo.maxAngle);
       servoList[singleServo.servoNum]["angle"] = parseInt(singleServo.angle);
       servoList[singleServo.servoNum]["direction"] = parseInt(singleServo.direction);
-      servoList[singleServo.servoNum]["active"] = parseInt(singleServo.active);
+      servoList[singleServo.servoNum]["enabled"] = parseInt(singleServo.enabled);
       if (!("override" in servoList[singleServo.servoNum])) {
         servoList[singleServo.servoNum]["override"] = false;
       }
@@ -59,7 +59,7 @@
     const appendServo = (singleServo) => {
       const servoTable = document.querySelector('.servoTable');
       let servoTableBodyRow = document.createElement('tr');
-      if (singleServo.active) {
+      if (singleServo.enabled) {
         servoTableBodyRow.className = 'servoTableBodyRow';
       }
       else {
@@ -80,12 +80,12 @@
       let servoChangeAngle = document.createElement('td');
       let servoUpLeftButton = document.createElement('button');
       servoUpLeftButton.className = 'servoTableBodyButton';
-      if (!singleServo.active) {
+      if (!singleServo.enabled) {
         servoUpLeftButton.disabled = true;
       }
       let servoDownRightButton = document.createElement('button');
       servoDownRightButton.className = 'servoTableBodyButton';
-      if (!singleServo.active) {
+      if (!singleServo.enabled) {
         servoDownRightButton.disabled = true;
       }
     
@@ -137,7 +137,7 @@
       servoOverrideSelector.name = "overrideSelector";
       servoOverrideSelector.id = "overrideSelector";
       servoOverrideSelector.value = singleServo.servoNum;
-      if (!singleServo.active) {
+      if (!singleServo.enabled) {
         servoOverrideSelector.disabled = true;
       }
       else {
