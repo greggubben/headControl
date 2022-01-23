@@ -67,6 +67,10 @@ uint16_t screenWidth = 0;
 uint16_t statusTopLeftX = 0;
 uint16_t statusTopLeftY = 0;
 uint16_t statusHeight = 0;
+int16_t  restStatusX = 0;
+int16_t  restStatusY = 0;
+uint16_t restHeight = 0;
+unsigned long restSeconds = 0;
 
 bool drawScreen = false;
 
@@ -105,7 +109,12 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 //
 // Web Server definitions
 //
-AsyncWebServer server(80);
+AsyncWebServer webServer(80);
+
+//
+// Web Socket definitions
+//
+AsyncWebSocket webSocketServer("/ws");
 
 
 //
@@ -128,7 +137,7 @@ headServo left_eye_updown     = {2,  true, "LEFT  EYE U/D ",  70, 100,  85, "UD"
 headServo left_eye_leftright  = {3,  true, "LEFT  EYE SIDE",  50, 76,   63, "LR"};
 headServo right_eye_updown    = {4,  true, "RIGHT EYE U/D ",  73, 123,  98, "UD"};
 headServo right_eye_leftright = {5,  true, "RIGHT EYE SIDE",  59,  94,  76, "RL"};
-headServo mouth               = {6,  true,     "MOUTH OPEN",  64,  88,  65, "UD"};
+headServo mouth               = {6,  true,     "MOUTH OPEN",  66,  88,  67, "DU"};
 headServo neck_updown         = {7, false,      "NECK NOD ",  67,  77,  70, "UD"};
 headServo neck_leftright      = {8, false,      "NECK TURN",  30, 100,  65, "LR"};
 
@@ -145,14 +154,21 @@ typedef struct face {     // Definition for Face to set head servos
 } face;
 
 // List of Face definitions
-face middle = {"Middle", { 80,  89,  85,  63,  98,  76,  65,  70,  65}};
-face frown  = {"Frown",  { 60, 112,  85,  63,  98,  76,  65,  70,  65}};
-face spock  = {"Spock",  { 80, 112,  85,  63,  98,  76,  65,  70,  65}};
+face relaxed = {"Relaxed", { 80,  89,  85,  63,  98,  76,  67,  70,  65}};
+face frown   = {"Frown",   { 60, 112,  85,  63,  98,  76,  67,  70,  65}};
+face spock   = {"Spock",   { 80, 112,  85,  63,  98,  76,  67,  70,  65}};
+face smile   = {"Smile",   { 80, 112,  85,  63,  98,  76,  67,  70,  65}};
+face sad     = {"Sad",     { 80, 112,  85,  63,  98,  76,  67,  70,  65}};
+face cross   = {"Cross",   { 80, 112,  85,  63,  98,  76,  67,  70,  65}};
 
-face *faces[] = {&middle, &frown, &spock};
+face *faces[] = {&relaxed, &frown, &spock};
 int facesLen = sizeof(faces) / sizeof(faces[0]);
 
-int selectedFaceNum = 0;    // Default to the Middle face
+const int defaultFace = 0;          // Default face to return to - start with Relaxed
+int selectedFaceNum = defaultFace;  // Start with the Default face
+const unsigned long showFaceDurationMillis = 300000; // How long to show a face before returning to default resting face
+bool atRest = true;                             // Is the head at it's default resting face?
+unsigned long lastFaceChangeMillis = 0;         // Last time the face changed
 
 /*************************************************
  * Callback Utilities during setup
@@ -198,6 +214,34 @@ void clearTftScreen(uint8_t fontSize, uint16_t fontColor) {
   tft.setCursor(0,0);
 }
 
+/*
+ * Only draw the Rest countdown status
+ * Must be called after drawStatus has been called at least once
+ * so variables are set up properly.
+ */
+void drawRestStatus() {
+  tft.setCursor(restStatusX, restStatusY);
+  if (atRest) {
+    tft.fillRect(restStatusX, restStatusY, screenWidth - restStatusX, restHeight, BACKGROUND_COLOR);
+    tft.print("Resting");
+  }
+  else {
+    unsigned long timeElapsed = millis() - lastFaceChangeMillis;
+    unsigned long timeLeftMillis = showFaceDurationMillis - timeElapsed;
+    unsigned long timeLeftSeconds = timeLeftMillis/1000;
+    if (restSeconds != timeLeftSeconds) {
+      tft.fillRect(restStatusX, restStatusY, screenWidth - restStatusX, restHeight, BACKGROUND_COLOR);
+      tft.print(timeLeftSeconds);
+      tft.print(" sec");
+      restSeconds = timeLeftSeconds;
+    }
+  }
+
+}
+
+/*
+ * Draw the full screen status
+ */
 void drawStatus() {
   //tft.setCursor(statusTopLeftX, statusTopLeftY);
   //tft.setTextSize(SERVO_STATUS_FONT_SIZE);
@@ -210,7 +254,7 @@ void drawStatus() {
   uint16_t textWidth;
   uint16_t textHeight;
 
-  tft.printf("%2s %14s %3s\n", "#", "NAME", "Ang");
+  tft.printf("%2s %16s %5s\n", "#", "NAME", "Angle");
   int16_t cursorX = tft.getCursorX();
   int16_t cursorY = tft.getCursorY();
 
@@ -221,11 +265,11 @@ void drawStatus() {
   tft.drawLine(cursorX, cursorY, cursorX+length, cursorY, SERVO_HEADER_FONT_COLOR);
   cursorX += length;
   cursorX += textWidth;
-  length = textWidth*14;
+  length = textWidth*16;
   tft.drawLine(cursorX, cursorY, cursorX+length, cursorY, SERVO_HEADER_FONT_COLOR);
   cursorX += length;
   cursorX += textWidth;
-  length = textWidth*3;
+  length = textWidth*5;
   tft.drawLine(cursorX, cursorY, cursorX+length, cursorY, SERVO_HEADER_FONT_COLOR);
 
   tft.println();
@@ -237,7 +281,7 @@ void drawStatus() {
     else {
       tft.setTextColor(SERVO_STATUS_DISABLED_FONT_COLOR);
     }
-    tft.printf("%2d %14s %3d\n", hs->servoNum, hs->name.c_str(), hs->angle);
+    tft.printf("%2d %16s %5d\n", hs->servoNum, hs->name.c_str(), hs->angle);
     //tft.ptintln();
   }
 
@@ -245,6 +289,13 @@ void drawStatus() {
   tft.println();
   face *selectedFace = faces[selectedFaceNum];
   tft.printf("Face: %2d - %s\n", selectedFaceNum, selectedFace->name.c_str());
+
+  tft.print("Rest in: ");
+  restStatusX = tft.getCursorX(); 
+  restStatusY = tft.getCursorY();
+  restHeight = textHeight;
+
+  drawRestStatus();
 }
 
 
@@ -262,6 +313,7 @@ void setAngle (headServo *hs, int angle, bool limit = true) {
     pwm.setPWM(hs->servoNum, 0, pulse);
     hs->angle = angle;
   }
+  drawScreen = true;
   //tft.printf("%2d: %3d - %4d", hs->servoNum, angle, pulse);
 }
 
@@ -332,19 +384,6 @@ void middleServos() {
 
 
 //
-// set servos to initial values
-//
-void initServos() {
-  // Find the min and max of the limits
-  //for (headServo *hs : headServos) {
-  //  setAngle(hs, hs->angle);
-  //}
-  //face *newFace = faces[selectedFaceNum];
-  //setFace(faces[selectedFaceNum]);
-}
-
-
-//
 // Send the current status of the Servos
 //
 void sendServos(AsyncWebServerRequest *request) {
@@ -372,7 +411,7 @@ void sendServos(AsyncWebServerRequest *request) {
 
 
 /*************************************************
- * Servo Functions
+ * Face Functions
  *************************************************/
 
 
@@ -383,8 +422,14 @@ void setFace (face *newFace) {
   for (headServo *hs : headServos) {
     setAngle(hs, newFace->angles[hs->servoNum]);
   }
+  atRest = false;
+  lastFaceChangeMillis = millis();
 }
 
+void setDefaultFace() {
+  setFace(faces[defaultFace]);
+  atRest = true;        // This is the At Rest face
+}
 
 //
 // Send the list of Faces
@@ -433,7 +478,6 @@ void handleFace (AsyncWebServerRequest *request) {
       else {
         request->send(400, "text/plain", "Argument 'faceNum' missing.");
       }
-      drawScreen = true;
       break;
     case HTTP_GET:
       //left_eyebrow.name = "GET";
@@ -474,7 +518,6 @@ void handleServos (AsyncWebServerRequest *request) {
         request->send(400, "text/plain", "Argument 'servoNum' or 'angle' is missing.");
       }
       sendServos(request);
-      drawScreen = true;
       break;
     case HTTP_GET:
       //left_eyebrow.name = "GET";
@@ -655,7 +698,7 @@ void setup() {
    */
   //pwm.setOscillatorFrequency(25000000);
   pwm.setPWMFreq(SERVO_FREQ);  // Analog servos run at ~50 Hz updates
-  setFace(faces[selectedFaceNum]);
+  setDefaultFace();
   //initServos();
   delay(500);
   //middleServos();
@@ -673,22 +716,22 @@ void setup() {
   //
   tft.print("Web Server ... ");
   // Main page to select a Face to show on the Head
-  server.on("/", HTTP_GET, [] (AsyncWebServerRequest *request) {
+  webServer.on("/", HTTP_GET, [] (AsyncWebServerRequest *request) {
     request->send(SPIFFS, "/mainpage.html", "text/html");
   });
   // Web Service to put selected face on the head
   // and return face state
-  server.on("/face", handleFace);
+  webServer.on("/face", handleFace);
   // Test page to move the servos independently
-  server.on("/test", HTTP_GET, [] (AsyncWebServerRequest *request) {
+  webServer.on("/test", HTTP_GET, [] (AsyncWebServerRequest *request) {
     request->send(SPIFFS, "/testpage.html", "text/html");
   });
   // Web Service to set a single servo to a specific angle
   // and return state of all servos
-  server.on("/servos", handleServos);
+  webServer.on("/servos", handleServos);
   
-  server.onNotFound(handleNotFound);
-  server.begin();
+  webServer.onNotFound(handleNotFound);
+  webServer.begin();
   tft.println("Started");
 
   //
@@ -730,6 +773,15 @@ void loop() {
   //  }
   //}
   delay(100);
+
+  if (!atRest) {
+    if((millis() - lastFaceChangeMillis) > showFaceDurationMillis) {
+      setDefaultFace();
+    }
+    else {
+      drawRestStatus();
+    }
+  }
 
   if (drawScreen) {
     drawStatus();
