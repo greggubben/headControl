@@ -1,6 +1,6 @@
 <HTML>
     <HEAD>
-    <TITLE>Head Control Face Selection</TITLE>
+    <TITLE>Make A Face Selection</TITLE>
     <LINK REL="icon" HREF="data:,">
     <SCRIPT>
 
@@ -133,7 +133,7 @@
       .then (jsonData => {
         // Send JSON to callback function if present
         if (cFunction != undefined) {
-          displayDebug(JSON.stringify(jsonData));
+          //displayDebug(JSON.stringify(jsonData));
           cFunction(jsonData);
         }
       })
@@ -154,12 +154,38 @@
       }
     }
     
-    
+    // Web Socket Init
+    function initWebSocket() {
+      var ws_protocol = "ws:";
+      if (window.location.protocol == "https:") {
+        ws_protocol = "wss:";
+      }
+      websocket = new WebSocket(ws_protocol + "//" + window.location.hostname + "/facews");
+      websocket.onopen = onFaceWSOpen;
+      websocket.onclose = onFaceWSClose;
+      websocket.onmessage = onFaceWSMessage;
+    }
+
+    function onFaceWSOpen(event) {
+
+    }
+
+    function onFaceWSClose(event) {
+      setTimeout(initWebSocket, 2000);
+    }
+
+    function onFaceWSMessage(event) {
+      //displayDebug(event.data);
+      var facesJson = JSON.parse(event.data);
+      statusLoaded(facesJson);
+    }
+
     //
     // actions to perform when the page is loaded
     //
     function doOnLoad() {
       restCall('GET', '/face', statusLoaded);
+      initWebSocket();
     }
     
     </SCRIPT>
@@ -206,7 +232,7 @@
     </STYLE>
     </HEAD>
     <BODY onload='doOnLoad()'>
-    <CENTER><H1>Head Control Face Selection</H1></CENTER>
+    <CENTER><H1>Make A Face</H1></CENTER>
     <BR>
     <BR>
 

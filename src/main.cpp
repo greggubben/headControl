@@ -67,10 +67,15 @@ uint16_t screenWidth = 0;
 uint16_t statusTopLeftX = 0;
 uint16_t statusTopLeftY = 0;
 uint16_t statusHeight = 0;
+
 int16_t  restStatusX = 0;
 int16_t  restStatusY = 0;
-uint16_t restHeight = 0;
+uint16_t restStatusHeight = 0;
 unsigned long restSeconds = 0;
+
+int16_t  faceWebSocketStatusX = 0;
+int16_t  faceWebSocketStatusY = 0;
+uint16_t faceWebSocketStatusHeight = 0;
 
 bool drawScreen = false;
 
@@ -114,8 +119,8 @@ AsyncWebServer webServer(80);
 //
 // Web Socket definitions
 //
-AsyncWebSocket webSocketServer("/ws");
-
+AsyncWebSocket faceWebSocketServer("/facews");
+void notifyFaceClients();
 
 //
 // Head definitions
@@ -222,7 +227,7 @@ void clearTftScreen(uint8_t fontSize, uint16_t fontColor) {
 void drawRestStatus() {
   tft.setCursor(restStatusX, restStatusY);
   if (atRest) {
-    tft.fillRect(restStatusX, restStatusY, screenWidth - restStatusX, restHeight, BACKGROUND_COLOR);
+    tft.fillRect(restStatusX, restStatusY, screenWidth - restStatusX, restStatusHeight, BACKGROUND_COLOR);
     tft.print("Resting");
   }
   else {
@@ -230,13 +235,25 @@ void drawRestStatus() {
     unsigned long timeLeftMillis = showFaceDurationMillis - timeElapsed;
     unsigned long timeLeftSeconds = timeLeftMillis/1000;
     if (restSeconds != timeLeftSeconds) {
-      tft.fillRect(restStatusX, restStatusY, screenWidth - restStatusX, restHeight, BACKGROUND_COLOR);
+      tft.fillRect(restStatusX, restStatusY, screenWidth - restStatusX, restStatusHeight, BACKGROUND_COLOR);
       tft.print(timeLeftSeconds);
       tft.print(" sec");
       restSeconds = timeLeftSeconds;
     }
   }
 
+}
+
+/*
+ * Only draw the number of Face Web Socket Clients
+ * Must be called after drawStatus has been called at least once
+ * so variables are set up properly.
+ */
+void drawFaceWebSocketStatus() {
+  tft.setCursor(faceWebSocketStatusX, faceWebSocketStatusY);
+  size_t faceClients = faceWebSocketServer.count();
+  tft.fillRect(faceWebSocketStatusX, faceWebSocketStatusY, screenWidth - faceWebSocketStatusX, faceWebSocketStatusHeight, BACKGROUND_COLOR);
+  tft.print(faceClients);
 }
 
 /*
@@ -271,8 +288,9 @@ void drawStatus() {
   cursorX += textWidth;
   length = textWidth*5;
   tft.drawLine(cursorX, cursorY, cursorX+length, cursorY, SERVO_HEADER_FONT_COLOR);
+  cursorY+=3;
+  tft.setCursor(0, cursorY);
 
-  tft.println();
   for (headServo *hs : headServos) {
     //uint16_t currPwm = pwm.getPWM(hs->servoNum);
     if (hs->enabled) {
@@ -285,16 +303,29 @@ void drawStatus() {
     //tft.ptintln();
   }
 
+  cursorY = tft.getCursorY();
+  cursorY -= (textHeight/2);
+  tft.setCursor(0, cursorY);
+
   tft.setTextColor(FACE_STATUS_FONT_COLOR);
   tft.println();
   face *selectedFace = faces[selectedFaceNum];
   tft.printf("Face: %2d - %s\n", selectedFaceNum, selectedFace->name.c_str());
 
-  tft.print("Rest in: ");
+  tft.print("Clients:   ");
+  faceWebSocketStatusX = tft.getCursorX(); 
+  faceWebSocketStatusY = tft.getCursorY();
+  faceWebSocketStatusHeight = textHeight;
+  tft.println();
+
+  tft.print("Rest in:   ");
   restStatusX = tft.getCursorX(); 
   restStatusY = tft.getCursorY();
-  restHeight = textHeight;
+  restStatusHeight = textHeight;
+  //tft.println();
 
+  // Dynamic status values can only be updated after the boilerplate is drawn
+  drawFaceWebSocketStatus();
   drawRestStatus();
 }
 
@@ -418,25 +449,33 @@ void sendServos(AsyncWebServerRequest *request) {
 //
 // Set servos to a new face
 //
-void setFace (face *newFace) {
+void _setFace (face *newFace) {
   for (headServo *hs : headServos) {
     setAngle(hs, newFace->angles[hs->servoNum]);
   }
   atRest = false;
   lastFaceChangeMillis = millis();
+  notifyFaceClients();
+}
+
+void setFace (int faceNum) {
+  if (0 <= faceNum && faceNum < facesLen) {
+    selectedFaceNum = faceNum;
+    face *newFace = faces[selectedFaceNum];
+    _setFace(newFace);
+  }
 }
 
 void setDefaultFace() {
-  setFace(faces[defaultFace]);
+  setFace(defaultFace);
   atRest = true;        // This is the At Rest face
 }
 
 //
-// Send the list of Faces
+// Build JSON object of Face data
 //
-void sendFaces(AsyncWebServerRequest *request) {
-  DynamicJsonDocument jsonDoc(2048);
-  JsonObject jsonRoot = jsonDoc.to<JsonObject>();
+void buildFaceJson(DynamicJsonDocument *jsonDoc) {
+  JsonObject jsonRoot = jsonDoc->to<JsonObject>();
 
   JsonArray jsonFaceArray = jsonRoot.createNestedArray("faces");
 
@@ -447,16 +486,25 @@ void sendFaces(AsyncWebServerRequest *request) {
     jsonFaceStatus["selected"] = (f == selectedFaceNum);
   }
 
-  String payload;
-  serializeJson(jsonDoc, payload);
-  request->send(200, "application/json", payload);
-
 }
 
 
 /*************************************************
  * Web Server Routines
  *************************************************/
+
+//
+// Send the list of Faces
+//
+void sendFaces(AsyncWebServerRequest *request) {
+  DynamicJsonDocument jsonDoc(2048);
+  buildFaceJson(&jsonDoc);
+
+  String payload;
+  serializeJson(jsonDoc, payload);
+  request->send(200, "application/json", payload);
+
+}
 
 void handleFace (AsyncWebServerRequest *request) {
   uint8_t faceNum = 0;
@@ -466,9 +514,7 @@ void handleFace (AsyncWebServerRequest *request) {
       if (request->hasArg("faceNum")) {
         faceNum = request->arg("faceNum").toInt();
         if (0 <= faceNum && faceNum < facesLen) {
-          selectedFaceNum = faceNum;
-          face *newFace = faces[selectedFaceNum];
-          setFace(newFace);
+          setFace(faceNum);
           sendFaces(request);
         }
         else {
@@ -548,6 +594,46 @@ void handleNotFound(AsyncWebServerRequest *request) {
   }
   request->send(404, "text/plain", message);
   //digitalWrite(led, 0);
+}
+
+/*************************************************
+ * Web Socket Routines
+ *************************************************/
+
+//
+// Send the list of Faces
+//
+void notifyFaceClients() {
+  DynamicJsonDocument jsonDoc(2048);
+  buildFaceJson(&jsonDoc);
+
+  String payload;
+  serializeJson(jsonDoc, payload);
+  faceWebSocketServer.textAll(payload);
+}
+
+
+//
+// Handle events raised on Web Socket
+//
+void onFaceWebSocketEvent (AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type,
+             void *arg, uint8_t *data, size_t len) {
+  switch (type) {
+    case WS_EVT_CONNECT:
+      //Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
+      drawFaceWebSocketStatus();
+      break;
+    case WS_EVT_DISCONNECT:
+      //Serial.printf("WebSocket client #%u disconnected\n", client->id());
+      drawFaceWebSocketStatus();
+      break;
+    case WS_EVT_DATA:
+      //handleWebSocketMessage(arg, data, len);
+      break;
+    case WS_EVT_PONG:
+    case WS_EVT_ERROR:
+      break;
+  }
 }
 
 
@@ -734,6 +820,16 @@ void setup() {
   webServer.begin();
   tft.println("Started");
 
+
+  //
+  // Setup WebSocket
+  //
+  tft.print("Web Socket ... ");
+  faceWebSocketServer.onEvent(onFaceWebSocketEvent);
+  webServer.addHandler(&faceWebSocketServer);
+  tft.println("Started");
+
+
   //
   // Done with Setup
   //
@@ -762,6 +858,7 @@ void setup() {
 void loop() {
   // Handle any requests
   ArduinoOTA.handle();
+  faceWebSocketServer.cleanupClients();
   //server.handleClient();  // Not needed with AsyncWebServer
   //MDNS.update();          // Not needed on ESP32
   //telnetSerial.handle();
