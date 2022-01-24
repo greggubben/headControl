@@ -4,7 +4,7 @@
     <LINK REL="icon" HREF="data:,">
     <SCRIPT>
 
-    let tableHeaders = ["Face Num", "Name", "Select"];
+    let tableHeaders = ["Name", "Select"];
     var faceList = {};
     
     const buildFaceList = (singleFace) => {
@@ -52,8 +52,8 @@
       let faceTableBodyRow = document.createElement('tr');
       faceTableBodyRow.className = 'faceTableBodyRow';
     
-      let faceNum = document.createElement('td');
-      faceNum.innerText = singleFace.faceNum;
+      //let faceNum = document.createElement('td');
+      //faceNum.innerText = singleFace.faceNum;
       let faceName = document.createElement('td');
       faceName.innerText = singleFace.name;
       let faceSelect = document.createElement('td');
@@ -70,7 +70,7 @@
         faceSelect.append(faceSelectButton);
       }
     
-      faceTableBodyRow.append(faceNum, faceName, faceSelect);
+      faceTableBodyRow.append(faceName, faceSelect);
       faceTable.append(faceTableBodyRow);
     }
 
@@ -200,34 +200,33 @@
           font-weight: bold;
           font-size: large;
           height: 50px;
-          background-color: DarkBlue;
-          color: PowderBlue;
+          background-color: DarkGreen;
+          color: HoneyDew;
         }
         .faceTableHeaderRow th {
           padding: 10px;
+          min-width: 75px;
         }
         .faceTableBodyRow:nth-child(odd) {
-          background-color: rgba(128, 128, 224, 0.050);
+          background-color: rgba(128, 224, 128, 0.050);
         }
         .faceTableBodyRow:hover {
-          background-color: LightBlue;
+          background-color: LightGreen;
         }
         .faceTable tr td {
           height: 50px;
           padding: 6px;
         }
         .faceTableBodyButton {
-          font-weight: bold;
           margin: 2px;
           width: 90px;
           height: 25px;
-          background-color: MediumBlue;
-          color: SkyBlue;
+          background-color: MediumAquaMarine;
           border-radius: 5px;
         }
         .faceTableBodyButton:hover {
-          background-color: Cyan;
-          color: DarkBlue;
+          background-color: SeaGreen;
+          color: HoneyDew;
         }
     </STYLE>
     </HEAD>
