@@ -59,7 +59,10 @@
     const appendServo = (singleServo) => {
       const servoTable = document.querySelector('.servoTable');
       let servoTableBodyRow = document.createElement('tr');
-      if (singleServo.enabled) {
+      if (singleServo.angle < singleServo.minAngle || singleServo.maxAngle < singleServo.angle) {
+        servoTableBodyRow.className = 'servoTableBodyOutRangeRow';
+      }
+      else if (singleServo.enabled) {
         servoTableBodyRow.className = 'servoTableBodyRow';
       }
       else {
@@ -291,11 +294,14 @@
     .servoTableBodyRow:hover {
       background-color: LightGreen;
     }
-    .servoTableBodyDisabledRow:nth-child(odd) {
-      background-color: WhiteSmoke;
+    .servoTableBodyOutRangeRow {
+      background-color: LightCoral;
     }
-    .servoTableBodyDisabledRow:hover {
-      background-color: LightGrey;
+    .servoTableBodyOutRangeRow:hover {
+      background-color: IndianRed;
+    }
+    .servoTableBodyDisabledRow {
+      background-color: WhiteSmoke;
     }
     .servoTable tr td {
       white-space:nowrap;

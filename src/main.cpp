@@ -60,6 +60,7 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 #define SERVO_STATUS_FONT_SIZE 2
 #define SERVO_STATUS_FONT_COLOR ILI9341_GREENYELLOW
 #define SERVO_STATUS_DISABLED_FONT_COLOR ILI9341_LIGHTGREY
+#define SERVO_STATUS_OUTRANGE_FONT_COLOR ILI9341_RED
 #define SERVO_HEADER_FONT_COLOR ILI9341_GREEN
 #define FACE_STATUS_FONT_COLOR ILI9341_CYAN
 uint16_t screenHeight = 0;
@@ -293,7 +294,10 @@ void drawStatus() {
 
   for (headServo *hs : headServos) {
     //uint16_t currPwm = pwm.getPWM(hs->servoNum);
-    if (hs->enabled) {
+    if (hs->angle < hs->limitMinAngle || hs->limitMaxAngle < hs->angle) {
+      tft.setTextColor(SERVO_STATUS_OUTRANGE_FONT_COLOR);
+    }
+    else if (hs->enabled) {
       tft.setTextColor(SERVO_STATUS_FONT_COLOR);
     }
     else {
