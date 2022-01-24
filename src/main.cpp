@@ -551,7 +551,6 @@ void handleServos (AsyncWebServerRequest *request) {
   //left_eyebrow.name = String("HNDL");
   switch (request->method()) {
     case HTTP_PUT:
-      //left_eyebrow.name = "PUT";
       if (request->hasArg("servoNum") && request->hasArg("angle")) {
         servoNum = request->arg("servoNum").toInt();
         angle = request->arg("angle").toInt();
@@ -564,13 +563,18 @@ void handleServos (AsyncWebServerRequest *request) {
           request->send(400, "text/plain", "Argument 'servoNum' out of range.");
         }
       }
+      else if (request->hasArg("middle")) {
+        middleServos();
+      }
+      else if (request->hasArg("default")) {
+        setDefaultFace();
+      }
       else {
         request->send(400, "text/plain", "Argument 'servoNum' or 'angle' is missing.");
       }
       sendServos(request);
       break;
     case HTTP_GET:
-      //left_eyebrow.name = "GET";
       sendServos(request);
       break;
     default:

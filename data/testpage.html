@@ -287,6 +287,7 @@
     }
     .servoTableHeaderRow th {
       padding: 10px;
+      min-width: 75px;
     }
     .servoTableBodyRow:nth-child(odd) {
       background-color: rgba(128, 224, 128, 0.050);
@@ -310,8 +311,8 @@
     }
     .servoTableBodyButton {
       margin: 2px;
-      width: 100px;
-      height: 25px;
+      min-width: 100px;
+      min-height: 25px;
       background-color: MediumAquaMarine;
       border-radius: 5px;
     }
@@ -340,7 +341,11 @@
     </center>
     <BR>
     <DIV class='servoList'></DIV>
-    
+    <BR>
+    <DIV style="text-align: center;">
+      <BUTTON type="button" class="servoTableBodyButton" onClick="restCall('PUT', '/servos?middle', statusLoaded);">Middle Servos</BUTTON>
+      <BUTTON type="button" class="servoTableBodyButton" onClick="restCall('PUT', '/servos?default', statusLoaded);">Default Face</BUTTON>
+      </DIV>
     <BR>
     <HR style='margin-top: 10px; margin-bottom: 10px;'>
     <DIV id='debug' style='font-family: monospace; color:blue; outline-style: solid; outline-color:blue; outline-width: 2px; visibility: hidden; padding-top: 10px; padding-bottom: 10px; margin-top: 10px; margin-bottom: 10px;'></DIV><BR>
