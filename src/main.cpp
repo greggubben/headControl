@@ -16,7 +16,7 @@
 #include <SPI.h>                      // For display
 #include <Adafruit_GFX.h>             // For display
 #include <Adafruit_ILI9341.h>         // For display
-//#include <XPT2046_Touchscreen.h>      // For display
+#include <XPT2046_Touchscreen.h>      // For display
 #include <Adafruit_PWMServoDriver.h>  // For Servos
 #include "settings.h"                 // Secret values
 using namespace std;
@@ -43,10 +43,11 @@ const int ledPin =  LED_BUILTIN;  // the number of the LED pin
 //#define TS_CS D3   //for D1 mini or TFT I2C Connector Shield (V1.1.0 or later)
 //#define TFT_LED D2  //for D1 mini to adjust brightness
 
-#define TFT_CS 14  //for D32 Pro
-#define TFT_DC 27  //for D32 Pro
-#define TFT_RST 33 //for D32 Pro
-#define TS_CS  12 //for D32 Pro
+#define TFT_CS  14  //for D32 Pro
+#define TFT_DC  27  //for D32 Pro
+#define TFT_RST 33  //for D32 Pro
+#define TFT_LED 32  //for D32 Pro
+#define TS_CS   12  //for D32 Pro
 
 // Visual part of the Display
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
@@ -63,21 +64,29 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 #define SERVO_STATUS_OUTRANGE_FONT_COLOR ILI9341_RED
 #define SERVO_HEADER_FONT_COLOR ILI9341_GREEN
 #define FACE_STATUS_FONT_COLOR ILI9341_CYAN
+// Time to wait to dim or turn off screen
+#define SCREEN_OFF_DELAY 600000   // 10 minutes
+#define SCREEN_BRIGHTNESS_FULL 255
+#define SCREEN_BRIGHTNESS_OFF 0
+
 uint16_t screenHeight = 0;
 uint16_t screenWidth = 0;
 uint16_t statusTopLeftX = 0;
 uint16_t statusTopLeftY = 0;
 uint16_t statusHeight = 0;
-
+// variables used for returning face to a resting state
 int16_t  restStatusX = 0;
 int16_t  restStatusY = 0;
 uint16_t restStatusHeight = 0;
 unsigned long restSeconds = 0;
-
+// variables used for handling the websocket
 int16_t  faceWebSocketStatusX = 0;
 int16_t  faceWebSocketStatusY = 0;
 uint16_t faceWebSocketStatusHeight = 0;
+// variables used for showing screen only during activity
+unsigned long lastActivity = 0;   // Timestamp of when the last activity happened in millis
 
+bool screenOn = true;
 bool drawScreen = false;
 
 
@@ -85,20 +94,15 @@ bool drawScreen = false;
 // Touchscreen definitions
 //
 // Touch response part of the display
-//XPT2046_Touchscreen ts(TS_CS);
-
-// This is calibration data for the raw touch data to the screen coordinates
-#define TS_MINX 700
-#define TS_MINY 500
-#define TS_MAXX 3500
-#define TS_MAXY 3800
-
+XPT2046_Touchscreen ts(TS_CS);
 
 
 //
 // PWM definitions
 //
 // called this way, it uses the default address 0x40
+#define I2C_SDA 21  // For D32 Pro
+#define I2C_SCL 22  // For D32 Pro
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
 
 // Depending on your servo make, the pulse width min and max may vary, you 
@@ -137,12 +141,12 @@ typedef struct headServo {  // Definition for Servo being used by the head
 } headServo;
 
 // The widest range for all the servos is 30 to 150
-headServo left_eyebrow        = {0,  true, "LEFT  EYE BROW",  58, 102,  80, "UD"};
-headServo right_eyebrow       = {1,  true, "RIGHT EYE BROW",  64, 114,  89, "DU"};
+headServo left_eyebrow        = {0,  true, "LEFT  EYE BROW",  58, 102,  80, "DU"};
+headServo right_eyebrow       = {1,  true, "RIGHT EYE BROW",  64, 114,  89, "UD"};
 headServo left_eye_updown     = {2,  true, "LEFT  EYE U/D ",  70, 100,  85, "UD"};
-headServo left_eye_leftright  = {3,  true, "LEFT  EYE SIDE",  50, 76,   63, "LR"};
+headServo left_eye_leftright  = {3,  true, "LEFT  EYE SIDE",  50, 90,   63, "LR"};
 headServo right_eye_updown    = {4,  true, "RIGHT EYE U/D ",  73, 123,  98, "UD"};
-headServo right_eye_leftright = {5,  true, "RIGHT EYE SIDE",  59,  94,  76, "RL"};
+headServo right_eye_leftright = {5,  true, "RIGHT EYE SIDE",  59,  94,  76, "LR"};
 headServo mouth               = {6,  true,     "MOUTH OPEN",  66,  88,  67, "DU"};
 headServo neck_updown         = {7, false,      "NECK NOD ",  67,  77,  70, "UD"};
 headServo neck_leftright      = {8, false,      "NECK TURN",  30, 100,  65, "LR"};
@@ -163,16 +167,16 @@ typedef struct face {     // Definition for Face to set head servos
 face relaxed = {"Relaxed", { 80,  89,  85,  63,  98,  76,  67,  70,  65}};
 face frown   = {"Frown",   { 60, 112,  85,  63,  98,  76,  67,  70,  65}};
 face spock   = {"Spock",   { 80, 112,  85,  63,  98,  76,  67,  70,  65}};
-face smile   = {"Smile",   { 80, 112,  85,  63,  98,  76,  67,  70,  65}};
-face sad     = {"Sad",     { 80, 112,  85,  63,  98,  76,  67,  70,  65}};
-face cross   = {"Cross",   { 80, 112,  85,  63,  98,  76,  67,  70,  65}};
+face smile   = {"Smile",   { 75,  96,  96,  63, 106,  76,  78,  70,  65}};
+face sad     = {"Sad",     { 93,  73,  75,  67,  89,  78,  67,  70,  65}};
+face cross   = {"Cross",   { 66, 104,  78,  82,  88,  70,  67,  70,  65}};
 
-face *faces[] = {&relaxed, &frown, &spock};
+face *faces[] = {&relaxed, &frown, &spock, &smile, &sad, &cross};
 int facesLen = sizeof(faces) / sizeof(faces[0]);
 
 const int defaultFace = 0;          // Default face to return to - start with Relaxed
 int selectedFaceNum = defaultFace;  // Start with the Default face
-const unsigned long showFaceDurationMillis = 300000; // How long to show a face before returning to default resting face
+const unsigned long showFaceDurationMillis = 2*60000; // How long to show a face before returning to default resting face
 bool atRest = true;                             // Is the head at it's default resting face?
 unsigned long lastFaceChangeMillis = 0;         // Last time the face changed
 
@@ -219,6 +223,25 @@ void clearTftScreen(uint8_t fontSize, uint16_t fontColor) {
   tft.setTextColor(fontColor);
   tft.setCursor(0,0);
 }
+
+
+/*
+ * Turn the screen on
+ */
+void turnScreenOn() {
+  digitalWrite(TFT_LED, SCREEN_BRIGHTNESS_FULL);
+  screenOn = true;
+}
+
+/*
+ * Turn the screen off
+ */
+void turnScreenOff() {
+  digitalWrite(TFT_LED, SCREEN_BRIGHTNESS_OFF);
+  clearTftScreen(SERVO_STATUS_FONT_SIZE, SERVO_HEADER_FONT_COLOR);
+  screenOn = false;
+}
+
 
 /*
  * Only draw the Rest countdown status
@@ -652,9 +675,18 @@ void setup() {
   Serial.begin(115200);
   Serial.println(ESP.getSdkVersion());
 
+  // start ticker to slow blink LED during Setup
+  ticker.attach(0.6, tick);
+
   // set the digital pin as output:
   pinMode(ledPin, OUTPUT);
+  pinMode(TFT_LED, OUTPUT);
+  turnScreenOn();
 
+
+  //
+  // Start the screen so startup status can be displayed
+  //
   tft.begin();
   clearTftScreen(SETUP_FONT_SIZE, SETUP_FONT_COLOR);
   screenWidth = tft.width();
@@ -663,19 +695,18 @@ void setup() {
   tft.println(ESP.getSdkVersion());
   tft.println();
 
-  /*
+  
+  //
+  // Start Touch Screen
+  //
+  tft.print("Touch Screen ... ");
   if (!ts.begin()) { 
-    Serial.println("Unable to start touchscreen.");
+    tft.println("Error Starting");
   } 
   else { 
-    Serial.println("Touchscreen started."); 
+    tft.println("Started"); 
   }
   ts.setRotation(0);
-*/
-
-
-  // start ticker to slow blink LED strip during Setup
-  ticker.attach(0.6, tick);
 
 
   //
@@ -763,15 +794,10 @@ void setup() {
   ArduinoOTA.begin();
   tft.println("Started");
 
-  // Setup Telnet Serial
-  //telnetSerial.begin(115200);
-  //usbSerial = telnetSerial.getOriginalSerial();
 
-  // Let USB/Hardware Serial know where to connect.
-  //usbSerial->print("Ready! Use 'telnet ");
-  //usbSerial->print(WiFi.localIP());
-  //usbSerial->printf(" %d' to connect\n", TELNETSERIAL_DEFAULT_PORT);
-
+  //
+  // Set up the PWM board
+  //
   tft.print("PWM  ");
   pwm.begin();
   /*
@@ -793,17 +819,9 @@ void setup() {
   //pwm.setOscillatorFrequency(25000000);
   pwm.setPWMFreq(SERVO_FREQ);  // Analog servos run at ~50 Hz updates
   setDefaultFace();
-  //initServos();
   delay(500);
-  //middleServos();
   tft.println("Started");
 
-/*
-  tft.println("SERVO Range Test ");
-  servoRangeTest();
-  middleServos();
-  tft.println("Completed");
-*/
 
   //
   // Setup WebServer
@@ -848,14 +866,7 @@ void setup() {
   tft.println("Setup Complete!");
   tft.println();
 
-/*
-  clearTftScreen()
-  statusTopLeftX = tft.getCursorX();
-  statusTopLeftY = tft.getCursorY();
-  tft.fillRect(0,statusTopLeftY, screenWidth, DIVIDER_HEIGHT, DIVIDER_COLOR);
-  statusTopLeftY += (DIVIDER_HEIGHT*2);
-  statusHeight = screenHeight - statusTopLeftY;
-*/
+  // Indicate the screen now needs to be drawn
   drawScreen = true;
 }
 
@@ -869,16 +880,18 @@ void loop() {
   faceWebSocketServer.cleanupClients();
   //server.handleClient();  // Not needed with AsyncWebServer
   //MDNS.update();          // Not needed on ESP32
-  //telnetSerial.handle();
 
-  // Drive each servo one at a time using setPWM()
-  //for (int angle = 0; angle < 181; angle+=10) {
-  //  for(int s=0; s<9; s++) {
-  //    pwm.setPWM(s, 0, map(angle, 0, 180, SERVOMIN, SERVOMAX));
-  //  }
-  //}
-  delay(100);
+  bool isTouched = ts.touched();
+  if (isTouched) {
+    drawScreen = true;
+  }
 
+  // Is it time to turn off the screen?
+  if ((screenOn) && ((millis() - lastActivity) > SCREEN_OFF_DELAY)) {
+    turnScreenOff();
+  }
+
+  // See if it ia time to rest
   if (!atRest) {
     if((millis() - lastFaceChangeMillis) > showFaceDurationMillis) {
       setDefaultFace();
@@ -888,9 +901,14 @@ void loop() {
     }
   }
 
+  // Does the screen need to be redrawn
   if (drawScreen) {
+    turnScreenOn();
     drawStatus();
+    lastActivity = millis();
     drawScreen = false;
   }
 
+  // slow down the loop a little since most activity is covered by event processing
+  delay(50);
 }
