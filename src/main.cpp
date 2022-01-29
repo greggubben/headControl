@@ -530,14 +530,12 @@ void sendFaces(AsyncWebServerRequest *request) {
   String payload;
   serializeJson(jsonDoc, payload);
   request->send(200, "application/json", payload);
-
 }
 
 void handleFace (AsyncWebServerRequest *request) {
   uint8_t faceNum = 0;
   switch (request->method()) {
     case HTTP_PUT:
-      //left_eyebrow.name = "PUT";
       if (request->hasArg("faceNum")) {
         faceNum = request->arg("faceNum").toInt();
         if (0 <= faceNum && faceNum < facesLen) {
@@ -553,14 +551,13 @@ void handleFace (AsyncWebServerRequest *request) {
       }
       break;
     case HTTP_GET:
-      //left_eyebrow.name = "GET";
       sendFaces(request);
       break;
     default:
       request->send(405, "text/plain", "Method Not Allowed");
       break;
   }
-  //server.send_P(200, "text/html", TEST_PAGE, sizeof(TEST_PAGE));
+  drawScreen = true;
 }
 
 
@@ -571,7 +568,6 @@ void handleServos (AsyncWebServerRequest *request) {
   uint8_t servoNum = 0;
   uint8_t angle = 0;
   bool limit = true;
-  //left_eyebrow.name = String("HNDL");
   switch (request->method()) {
     case HTTP_PUT:
       if (request->hasArg("servoNum") && request->hasArg("angle")) {
@@ -604,14 +600,13 @@ void handleServos (AsyncWebServerRequest *request) {
       request->send(405, "text/plain", "Method Not Allowed");
       break;
   }
-  //server.send_P(200, "text/html", TEST_PAGE, sizeof(TEST_PAGE));
+  drawScreen = true;
 }
 
 //
 // Display a Not Found page
 //
 void handleNotFound(AsyncWebServerRequest *request) {
-  //digitalWrite(led, 1);
   String message = "File Not Found\n\n";
   message += "URI: ";
   message += request->url();
@@ -624,8 +619,8 @@ void handleNotFound(AsyncWebServerRequest *request) {
     message += " " + request->argName(i) + ": " + request->arg(i) + "\n";
   }
   request->send(404, "text/plain", message);
-  //digitalWrite(led, 0);
 }
+
 
 /*************************************************
  * Web Socket Routines
@@ -829,13 +824,16 @@ void setup() {
   tft.print("Web Server ... ");
   // Main page to select a Face to show on the Head
   webServer.on("/", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    drawScreen = true;
     request->send(SPIFFS, "/mainpage.html", "text/html");
   });
-  // Web Service to put selected face on the head
+  // Web Service to display selected face on the head
   // and return face state
   webServer.on("/face", handleFace);
+
   // Test page to move the servos independently
   webServer.on("/test", HTTP_GET, [] (AsyncWebServerRequest *request) {
+    drawScreen = true;
     request->send(SPIFFS, "/testpage.html", "text/html");
   });
   // Web Service to set a single servo to a specific angle
