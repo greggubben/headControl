@@ -64,6 +64,10 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
 #define SERVO_STATUS_OUTRANGE_FONT_COLOR ILI9341_RED
 #define SERVO_HEADER_FONT_COLOR ILI9341_GREEN
 #define FACE_STATUS_FONT_COLOR ILI9341_CYAN
+#define OTA_STATUS_FONT_SIZE 3
+#define OTA_STATUS_FONT_COLOR ILI9341_PINK
+#define OTA_ERROR_FONT_COLOR ILI9341_RED
+
 // Time to wait to dim or turn off screen
 #define SCREEN_OFF_DELAY 600000   // 10 minutes
 #define SCREEN_BRIGHTNESS_FULL 255
@@ -83,6 +87,10 @@ unsigned long restSeconds = 0;
 int16_t  faceWebSocketStatusX = 0;
 int16_t  faceWebSocketStatusY = 0;
 uint16_t faceWebSocketStatusHeight = 0;
+// variables used for handling the ota progress
+int16_t  otaProgressStatusX = 0;
+int16_t  otaProgressStatusY = 0;
+uint16_t otaProgressStatusHeight = 0;
 // variables used for showing screen only during activity
 unsigned long lastActivity = 0;   // Timestamp of when the last activity happened in millis
 
@@ -284,10 +292,6 @@ void drawFaceWebSocketStatus() {
  * Draw the full screen status
  */
 void drawStatus() {
-  //tft.setCursor(statusTopLeftX, statusTopLeftY);
-  //tft.setTextSize(SERVO_STATUS_FONT_SIZE);
-  //tft.setTextColor(SERVO_STATUS_FONT_COLOR);
-  //tft.fillRect(statusTopLeftX, statusTopLeftY, screenWidth, statusHeight, BACKGROUND_COLOR);
   clearTftScreen(SERVO_STATUS_FONT_SIZE, SERVO_HEADER_FONT_COLOR);
   
   int16_t textX;
@@ -356,6 +360,64 @@ void drawStatus() {
   drawRestStatus();
 }
 
+
+//
+// Display OTA status
+//
+void showOtaStart(String type) {
+  turnScreenOn();
+  clearTftScreen(OTA_STATUS_FONT_SIZE, OTA_STATUS_FONT_COLOR);
+  
+  int16_t textX;
+  int16_t textY;
+  uint16_t textWidth;
+  uint16_t textHeight;
+
+  tft.getTextBounds(" ", 0, 0, &textX, &textY, &textWidth, &textHeight);
+
+  tft.print("OTA in Progess\n");
+  tft.printf("Type: %s\n", type.c_str());
+  tft.print("Progress: ");
+  otaProgressStatusX = tft.getCursorX();
+  otaProgressStatusY = tft.getCursorY();
+  otaProgressStatusHeight = textHeight;
+  tft.println();
+
+
+}
+
+
+//
+// Display the progress of the OTA download
+//
+void showOtaProgress (unsigned int progress, unsigned int total) {
+  int16_t cursorX = tft.getCursorX();
+  int16_t cursorY = tft.getCursorY();
+
+  tft.setCursor(otaProgressStatusX, otaProgressStatusY);
+  unsigned int percentProgress = (progress / (total / 100));
+  tft.fillRect(otaProgressStatusX, otaProgressStatusY, screenWidth - otaProgressStatusX, otaProgressStatusHeight, BACKGROUND_COLOR);
+  tft.print(percentProgress);
+  tft.print("%");
+
+  tft.setCursor(cursorX, cursorY);
+}
+
+
+//
+// Display OTA Error
+//
+void showOtaError(ota_error_t error,String errorMessage) {
+  tft.setTextColor(OTA_ERROR_FONT_COLOR);
+  tft.printf("Error: %s", errorMessage.c_str());
+}
+
+//
+// Display the OTA has ended
+//
+void showOtaEnd() {
+  tft.println("END");
+}
 
 /*************************************************
  * Servo Functions
@@ -763,28 +825,38 @@ void setup() {
     } else { // U_FS
       type = "filesystem";
     }
+    showOtaStart(type);
     // NOTE: if updating FS this would be the place to unmount FS using FS.end()
     //Serial.println("Start updating " + type);
   });
   ArduinoOTA.onEnd([]() {
+    showOtaEnd();
     //Serial.println("\nEnd");
   });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    showOtaProgress(progress, total);
     //Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
   });
   ArduinoOTA.onError([](ota_error_t error) {
+    String errorMessage = String(error);
     //Serial.printf("Error[%u]: ", error);
     if (error == OTA_AUTH_ERROR) {
+      errorMessage = "Auth Failed";
       //Serial.println("Auth Failed");
     } else if (error == OTA_BEGIN_ERROR) {
+      errorMessage = "Begin Failed";
       //Serial.println("Begin Failed");
     } else if (error == OTA_CONNECT_ERROR) {
+      errorMessage = "Connect Failed";
       //Serial.println("Connect Failed");
     } else if (error == OTA_RECEIVE_ERROR) {
+      errorMessage = "Receive Failed";
       //Serial.println("Receive Failed");
     } else if (error == OTA_END_ERROR) {
+      errorMessage = "End Failed";
       //Serial.println("End Failed");
     }
+    showOtaError(error, errorMessage);
   });
   ArduinoOTA.begin();
   tft.println("Started");
