@@ -808,6 +808,7 @@ void setup() {
   //
   tft.print("mDNS ");
   MDNS.begin(devicename);
+  MDNS.addService(devicename, "tcp", 80);
   tft.println("Started");
 
 
